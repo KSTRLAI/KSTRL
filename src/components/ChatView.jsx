@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { renderMarkdown } from '../lib/markdown.js';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
+import { ModelMenu, resolveModel, modelLabel } from './ModelPicker.jsx';
 
 const api = window.kstrl;
 const EFFORT_ICON = { flash: Zap, normal: Gauge, high: Flame, max: Rocket };
@@ -71,7 +72,7 @@ function ToolCard({ block, onApprove, onOpenDiff, onOpenFile }) {
           <div className="label" style={{ color: 'var(--accent)' }}>Run this command?</div>
           <code>{block.input?.command}</code>
           <div className="row">
-            <button className="btn grad" onClick={() => onApprove(block, true)}>Run</button>
+            <button className="btn light" onClick={() => onApprove(block, true)}>Run</button>
             <button className="btn" onClick={() => onApprove(block, false)}>Skip</button>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11, color: 'var(--text-3)', alignSelf: 'center' }}>Auto-run can be enabled in Settings</span>
@@ -138,6 +139,24 @@ export function Popover({ anchor, onClose, children, width = 300, below = false 
   return <div ref={ref} className="popover glass-strong" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}>{children}</div>;
 }
 
+const TIPS = [
+  ['Ctrl+K', 'in the editor rewrites the selected code inline'],
+  ['Ctrl+L', 'sends your selection to Kestrel'],
+  ['@', 'attaches files from your project to a message'],
+  ['Ctrl+.', 'switches between Agent and Ask mode'],
+  ['Auto', 'in the model picker chooses the right Colossus model for you'],
+  ['Automations', 'run Kestrel on a schedule — find them in the sidebar'],
+  ['Ctrl+E', 'opens the full IDE; Ctrl+Shift+H brings you back here'],
+  ['Ctrl+Shift+P', 'opens the command palette with every action'],
+];
+
+function Tip() {
+  const [i, setI] = useState(() => Math.floor(Math.random() * TIPS.length));
+  useEffect(() => { const t = setInterval(() => setI((x) => (x + 1) % TIPS.length), 9000); return () => clearInterval(t); }, []);
+  const [k, d] = TIPS[i];
+  return <div className="tip">Tip: <b>{k}</b> {d}</div>;
+}
+
 const SUGGESTIONS = [
   { I: Hammer, t: 'Build a prototype', d: 'Describe an app and Kestrel scaffolds it', prompt: 'Build a prototype of ', mode: 'agent' },
   { I: ListChecks, t: 'Start with a plan', d: 'Align on implementation before writing code', prompt: 'Before writing any code, propose a step-by-step implementation plan for: ', mode: 'ask' },
@@ -160,7 +179,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
 
   const models = info?.models || [];
   const efforts = info?.efforts || [];
-  const model = models.find((m) => m.id === settings.model) || models[models.length - 1];
+  const label = modelLabel(info, settings);
   const effort = efforts.find((e) => e.id === settings.effort) || efforts[1];
   const mode = settings.mode || 'agent';
   const EffortIcon = EFFORT_ICON[effort?.id] || Gauge;
@@ -188,7 +207,8 @@ const ChatView = forwardRef(function ChatView(props, ref) {
     setMention(null);
     stick.current = true;
     if (!settings.onboarded) onSettings({ onboarded: true });
-    store.send({ text, context: ctx, model, effort, mode, activePath, project: workspace?.root ?? null });
+    const { model, auto } = resolveModel(info, settings, { text, contextCount: ctx.length, mode });
+    store.send({ text, context: ctx, model: model && { id: model.id, name: auto ? `${model.name} · Auto` : model.name }, effort, mode, activePath, project: workspace?.root ?? null });
   };
 
   const revert = async (item) => {
@@ -273,8 +293,8 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         <button className="chip-btn" title="Effort" onClick={openAt('effort')}><EffortIcon size={12} /> {effort?.name} <ChevronDown size={11} /></button>
         <span className="spacer" />
         <button className="chip-btn" title="Model" onClick={openAt('model')}>
-          <span className="mname">{model?.name || 'Model'}</span>
-          {model?.tag === 'Flagship' && <Lock size={10} style={{ opacity: 0.6 }} />}
+          <span className="mname">{label}</span>
+          {settings.effort === 'max' && <span className="max-badge">MAX</span>}
           <ChevronDown size={11} />
         </button>
         {chat.running ? (
@@ -289,17 +309,8 @@ const ChatView = forwardRef(function ChatView(props, ref) {
   const popovers = (
     <>
       {pop?.kind === 'model' && (
-        <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={310} below={hero}>
-          <div className="head label">Model</div>
-          {models.map((m) => (
-            <button key={m.id} className={'opt' + (m.id === model?.id ? ' sel' : '')} onClick={() => { onSettings({ model: m.id }); setPop(null); }}>
-              <div style={{ flex: 1 }}>
-                <div className="n">{m.name} <span className={'tg' + (m.tag === 'Flagship' ? ' flag' : '')}>{m.tag}</span></div>
-                <div className="d">{m.description}</div>
-              </div>
-              {m.id === model?.id && <Check size={14} className="check" />}
-            </button>
-          ))}
+        <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={300} below={hero}>
+          <ModelMenu info={info} settings={settings} onSettings={onSettings} onClose={() => setPop(null)} onManage={() => props.onManageModels?.()} />
         </Popover>
       )}
       {pop?.kind === 'effort' && (
@@ -401,7 +412,8 @@ const ChatView = forwardRef(function ChatView(props, ref) {
             ))}
           </div>
         </div>
-        <div className="home-foot">{settings.configured ? `Kestrel · ${model?.name} · ${settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server'}` : <button className="link" onClick={onOpenSettings}>Connect your Unsloth server to start chatting →</button>}</div>
+        {settings.showTips !== false && <Tip />}
+        <div className="home-foot">{settings.configured ? `Kestrel · ${label} · ${settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server'}` : <button className="link" onClick={onOpenSettings}>Connect your Unsloth server to start chatting →</button>}</div>
         {popovers}
       </div>
     );

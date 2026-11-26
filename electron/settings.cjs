@@ -5,6 +5,12 @@ const { MODELS } = require('./models.cjs');
 
 const file = () => path.join(app.getPath('userData'), 'kstrl-settings.json');
 
+// Built-in server connection, written at build time from GitHub Actions secrets
+// (KSTRL_UNSLOTH_URL / KSTRL_UNSLOTH_KEY). Every installed copy connects with it
+// automatically unless the user enters their own server in Settings.
+let BUILTIN = {};
+try { BUILTIN = JSON.parse(fs.readFileSync(path.join(__dirname, 'build-config.json'), 'utf8')) || {}; } catch {}
+
 const DEFAULTS = {
   provider: 'unsloth', // 'unsloth' (OpenAI-compatible server) | 'anthropic'
   // Unsloth server
@@ -22,9 +28,26 @@ const DEFAULTS = {
   autoRunCommands: false,
   customInstructions: '',
   // Workspace / UI
+  maxSteps: 60,
+  // Models
+  enabledModels: null, // null = all
+  // Workspace / UI
   recentFolders: [],
   lastFolder: null,
+  reopenLastProject: true,
   fontSize: 14,
+  uiScale: 100,
+  minimap: true,
+  wordWrap: false,
+  reduceTransparency: false,
+  showTips: true,
+  // Notifications
+  systemNotifications: true,
+  completionSound: false,
+  trayIcon: false,
+  autoUpdate: true,
+  // Stats
+  usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
   onboarded: false,
 };
 
@@ -75,10 +98,19 @@ function getApiKey() {
 
 function getUnsloth() {
   load();
+  const own = !!cache.unslothURL;
   return {
-    url: process.env.KSTRL_UNSLOTH_URL || cache.unslothURL,
-    key: process.env.KSTRL_UNSLOTH_KEY || unseal(cache.unslothKeyEnc) || '',
+    url: process.env.KSTRL_UNSLOTH_URL || cache.unslothURL || BUILTIN.unslothURL || '',
+    key: process.env.KSTRL_UNSLOTH_KEY || (own ? unseal(cache.unslothKeyEnc) : null) || (own ? '' : BUILTIN.unslothKey || '') || '',
+    builtin: !own && !!BUILTIN.unslothURL,
   };
+}
+
+function recordUsage(modelId, { input = 0, output = 0 } = {}) {
+  load();
+  const u = cache.usage[modelId] || { requests: 0, inputTokens: 0, outputTokens: 0 };
+  cache.usage = { ...cache.usage, [modelId]: { requests: u.requests + 1, inputTokens: u.inputTokens + input, outputTokens: u.outputTokens + output } };
+  save();
 }
 
 function backendFor(modelId) {
@@ -95,7 +127,8 @@ function isConfigured() {
 function publicView() {
   load();
   const { apiKeyEnc, unslothKeyEnc, ...rest } = cache;
-  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!getUnsloth().key, configured: isConfigured(), userName: require('node:os').userInfo().username };
+  const un = getUnsloth();
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {
@@ -105,4 +138,4 @@ function addRecent(folder) {
   save();
 }
 
-module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured };
+module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured, recordUsage };

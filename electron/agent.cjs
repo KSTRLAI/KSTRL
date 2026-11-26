@@ -267,7 +267,7 @@ class AgentManager {
       if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') this.emit(chatId, { type: 'tool_pending', runId, toolId: ev.content_block.id, name: ev.content_block.name });
     });
     const message = await stream.finalMessage();
-    if (message.usage) this.emit(chatId, { type: 'usage', runId, usage: message.usage });
+    if (message.usage) { this.emit(chatId, { type: 'usage', runId, usage: message.usage }); settings.recordUsage(model.id, { input: message.usage.input_tokens || 0, output: message.usage.output_tokens || 0 }); }
 
     if (message.stop_reason === 'refusal') {
       const kept = message.content.filter((b) => b.type !== 'tool_use');
@@ -291,12 +291,13 @@ class AgentManager {
       baseURL: unsloth.url,
       apiKey: unsloth.key,
       signal,
-      body: { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: toOpenAITools(tools), tool_choice: 'auto' },
+      body: { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: toOpenAITools(tools), tool_choice: 'auto', stream_options: { include_usage: true } },
       onText: (delta) => this.emit(chatId, { type: 'text', runId, delta }),
       onThinking: (delta) => this.emit(chatId, { type: 'thinking', runId, delta }),
       onToolStart: (id, name) => this.emit(chatId, { type: 'tool_pending', runId, toolId: id, name }),
     });
     if (r.usage) this.emit(chatId, { type: 'usage', runId, usage: { output_tokens: r.usage.completion_tokens || 0 } });
+    settings.recordUsage(ctx.model.id, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
     const calls = r.toolCalls.map((c) => {
       let input;
       let parseError = null;
@@ -357,7 +358,8 @@ class AgentManager {
       const ctx = { client, unsloth, model, effort, system, tools, chatId, runId, signal: controller.signal };
       if (provider === 'unsloth') ctx.modelId = await this.serverModel(model, unsloth, controller.signal);
       while (true) {
-        if (++turns > 60) { this.emit(chatId, { type: 'error', runId, message: 'Stopped after 60 steps. Send a follow-up to continue.' }); break; }
+        const maxSteps = Math.max(5, Math.min(500, s.maxSteps || 60));
+        if (++turns > maxSteps) { this.emit(chatId, { type: 'error', runId, message: `Stopped after ${maxSteps} steps. Send a follow-up to continue (limit is in Settings → Agents).` }); break; }
         this.emit(chatId, { type: 'turn_start', runId });
 
         let turn;

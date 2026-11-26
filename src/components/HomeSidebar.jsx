@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { SquarePen, Search, SlidersHorizontal, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
+import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 
 const base = (p) => (p ? p.split(/[\\/]/).pop() : '');
@@ -16,7 +16,7 @@ function Ring({ value, total }) {
   );
 }
 
-export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch }) {
+export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate }) {
   const s = useChats();
   const current = activeChat(s);
   const [filter, setFilter] = useState(null);
@@ -43,7 +43,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   const next = steps.find((x) => !x.done);
 
   const chatRow = (c, indent) => (
-    <div key={c.id} className={'hs-chat' + (c.id === current.id ? ' active' : '')} style={{ paddingLeft: indent }} onClick={() => store.setActive(c.id)} title={c.title}>
+    <div key={c.id} className={'hs-chat' + (c.id === current.id ? ' active' : '')} style={{ paddingLeft: indent }} onClick={() => { store.setActive(c.id); onChats(); }} title={c.title}>
       {c.running ? <Loader2 size={12} className="spin" color="var(--accent)" /> : <MessageSquare size={12} />}
       <span className="name">{c.title}</span>
       <button className="x" onClick={(e) => { e.stopPropagation(); store.close(c.id); }}><X size={11} /></button>
@@ -53,8 +53,9 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   return (
     <aside className="home-side glass-pane" style={{ width }}>
       <nav className="hs-nav">
-        <button className={'hs-item' + (current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">Ctrl+N</span></button>
+        <button className={'hs-item' + (homePage !== 'automations' && current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">Ctrl+N</span></button>
         <button className="hs-item" onClick={onSearch}><Search size={16} /> Search <span className="kbd">Ctrl+P</span></button>
+        <button className={'hs-item' + (homePage === 'automations' ? ' active' : '')} onClick={onAutomations}><Bot size={16} /> Automations {(settings.automations || []).some((a) => a.enabled && a.schedule?.type !== 'manual') && <span className="hs-dot" title="Scheduled automations active" />}</button>
         <button className="hs-item" onClick={onCustomize}><SlidersHorizontal size={16} /> Customize</button>
       </nav>
 
@@ -108,6 +109,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
       <div className="hs-user">
         <span className="avatar">{(settings.userName || 'K')[0].toUpperCase()}</span>
         <span className="name">{settings.userName || 'You'}</span>
+        {(update?.status === 'ready' || update?.status === 'available') && <button className="btn grad update-btn" title={`KSTRL ${update.version}`} onClick={onUpdate}><ArrowUpCircle size={13} /> Update</button>}
         <button className="icon-btn" title="Settings (Ctrl+,)" onClick={onSettings}><SettingsIcon size={15} /></button>
       </div>
     </aside>

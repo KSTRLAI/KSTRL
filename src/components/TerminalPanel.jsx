@@ -18,8 +18,8 @@ function XTerm({ id, visible, ptyMode }) {
       allowTransparency: true,
       scrollback: 8000,
       theme: {
-        background: '#0d0d0f', foreground: '#e6e6e6', cursor: '#ff3d3d', cursorAccent: '#0d0d0f',
-        selectionBackground: '#ff3d3d44', black: '#1a1a1e', red: '#ff5c5c', green: '#4ade80', yellow: '#f2c879',
+        background: '#0d0d0f', foreground: '#e6e6e6', cursor: '#ffffff', cursorAccent: '#0d0d0f',
+        selectionBackground: '#ffffff33', black: '#1a1a1e', red: '#ff5c5c', green: '#4ade80', yellow: '#f2c879',
         blue: '#7fb4ff', magenta: '#d68cff', cyan: '#7fd3ff', white: '#e6e6e6', brightBlack: '#5c5c66',
         brightRed: '#ff7a7a', brightGreen: '#86efac', brightYellow: '#fde68a', brightBlue: '#a5c8ff',
         brightMagenta: '#e3b0ff', brightCyan: '#a5e4ff', brightWhite: '#ffffff',

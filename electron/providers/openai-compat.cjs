@@ -67,6 +67,14 @@ async function streamChat({ baseURL, apiKey, body, signal, onText, onThinking, o
     if (signal?.aborted) throw e;
     throw new ProviderError(0, `Could not reach the Unsloth server at ${base} (${e.cause?.code || e.message}).`);
   }
+  if (!res.ok && res.status === 400 && body.stream_options) {
+    // Older servers reject stream_options — retry once without it.
+    const t = await res.clone().text().catch(() => '');
+    if (/stream_options|include_usage/i.test(t)) {
+      const { stream_options, ...rest } = body;
+      return streamChat({ baseURL, apiKey, body: rest, signal, onText, onThinking, onToolStart });
+    }
+  }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     let msg = t;

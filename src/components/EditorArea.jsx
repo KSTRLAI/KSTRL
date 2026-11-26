@@ -23,7 +23,7 @@ export function disposeDoc(path) {
 
 export const isDirty = (path) => { const d = docs.get(path); return !!d && d.model.getAlternativeVersionId() !== d.savedVersion; };
 
-const EditorArea = forwardRef(function EditorArea({ tabs, active, onActivate, onClose, onDirtyChange, onSave, model: modelId, fontSize, onToast, onAddSelection }, ref) {
+const EditorArea = forwardRef(function EditorArea({ tabs, active, onActivate, onClose, onDirtyChange, onSave, model: modelId, fontSize, minimap = true, wordWrap = false, onToast, onAddSelection }, ref) {
   const hostRef = useRef(null);
   const editorRef = useRef(null);
   const activeRef = useRef(active);
@@ -65,7 +65,7 @@ const EditorArea = forwardRef(function EditorArea({ tabs, active, onActivate, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { editorRef.current?.updateOptions({ fontSize }); }, [fontSize]);
+  useEffect(() => { editorRef.current?.updateOptions({ fontSize, minimap: { enabled: minimap, renderCharacters: false }, wordWrap: wordWrap ? 'on' : 'off' }); }, [fontSize, minimap, wordWrap]);
 
   // Swap models when the active tab changes, keeping scroll/cursor per file.
   useEffect(() => {

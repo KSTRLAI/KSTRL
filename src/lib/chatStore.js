@@ -59,7 +59,7 @@ export const chats = {
   setProject(project) {
     set((s) => ({ ...s, chats: s.chats.map((c) => (c.id === s.activeId && c.items.length === 0 ? { ...c, project } : c)) }));
   },
-  async send({ text, context = [], model, effort, mode, activePath, project }) {
+  async send({ text, title, context = [], model, effort, mode, activePath, project }) {
     const chat = activeChat();
     if (!text.trim() || chat.running) return;
     let full = text;
@@ -79,7 +79,7 @@ export const chats = {
     patchChat(chat.id, (c) => ({
       ...c,
       project: c.project ?? project ?? null,
-      title: c.items.length === 0 ? text.slice(0, 60) : c.title,
+      title: c.items.length === 0 ? (title || text.slice(0, 60)) : c.title,
       running: true,
       runId,
       items: [...c.items, { type: 'user', text, context }, { type: 'assistant', runId, blocks: [], running: true, model: model?.name, mode }],

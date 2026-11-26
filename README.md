@@ -14,6 +14,9 @@ Effort levels (from kstrlsi): **Flash · Normal · High · Max**.
 ## Features
 
 - **Agents home**: a chat-first start screen with projects, chat history, Getting Started, and a centered composer. Switch to the full editor with **IDE ↗** (`Ctrl+E`).
+- **Model picker** with search, **Auto** (KSTRL picks the right Colossus model for each request) and **MAX Mode** (full effort).
+- **Automations**: saved prompts that Kestrel runs on demand, at startup, hourly, daily or on weekdays while KSTRL is open.
+- **Settings** (`Ctrl+,`) is a full page with search. Tabs: General, Appearance, Plan & Usage, Agents, Models, Keyboard Shortcuts and About.
 - **Kestrel Agent panel** (`Ctrl+I`). Use **Agent** mode to read, write and edit files and run commands, or **Ask** mode for read-only answers. Kestrel streams its thought process and shows every tool call as a card.
 - **Change review.** Every file Kestrel touches gets a +/- diffstat and a side-by-side diff. You can **Revert all** for any run.
 - **Command approval.** Kestrel asks before it runs a terminal command. You can turn on auto-run in Settings.

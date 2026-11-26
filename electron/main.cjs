@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, Tray, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const settings = require('./settings.cjs');
@@ -11,6 +11,23 @@ const updater = require('./updater.cjs');
 const isDev = !!process.env.KSTRL_DEV;
 let win = null;
 let watcher = null;
+let tray = null;
+
+function applyTray() {
+  const want = !!settings.load().trayIcon;
+  if (want && !tray) {
+    const img = nativeImage.createFromPath(path.join(__dirname, '..', isDev ? 'public' : 'dist', 'icon.png')).resize({ width: 16, height: 16 });
+    tray = new Tray(img);
+    tray.setToolTip('KSTRL');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Show KSTRL', click: () => { if (win) { win.show(); win.focus(); } } },
+      { label: 'New Chat', click: () => { if (win) { win.show(); win.focus(); send('app:command', 'newchat'); } } },
+      { type: 'separator' },
+      { label: 'Quit KSTRL', click: () => app.quit() },
+    ]));
+    tray.on('click', () => { if (win) { win.show(); win.focus(); } });
+  } else if (!want && tray) { tray.destroy(); tray = null; }
+}
 
 app.setAppUserModelId('ai.kstrl.app');
 nativeTheme.themeSource = 'dark';
@@ -89,7 +106,12 @@ const handle = (ch, fn) => ipcMain.handle(ch, async (_e, ...args) => fn(...args)
 
 handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, models: MODELS.map(({ fallback, ...m }) => m), efforts: EFFORTS }));
 handle('settings:get', () => settings.publicView());
-handle('settings:update', (patch) => settings.update(patch));
+handle('settings:update', (patch) => {
+  const r = settings.update(patch);
+  if ('trayIcon' in patch) applyTray();
+  if ('autoUpdate' in patch) updater.setAuto(patch.autoUpdate);
+  return r;
+});
 
 handle('workspace:pick', async (opts) => {
   const r = await dialog.showOpenDialog(win, { title: opts?.title || 'Open Folder', buttonLabel: opts?.button, properties: ['openDirectory', 'createDirectory', 'promptToCreate'] });
@@ -125,6 +147,7 @@ handle('server:test', async (opts) => {
 handle('update:state', () => updater.getState());
 handle('update:check', () => updater.check());
 handle('update:install', () => updater.install());
+handle('update:download', () => updater.download());
 
 handle('term:create', (opts) => terms.create({ ...opts, cwd: ws.getRoot() || undefined }));
 handle('term:write', (id, data) => terms.write(id, data));
@@ -139,9 +162,10 @@ else {
     const s = settings.load();
     const appPath = path.resolve(app.getAppPath());
     const argDir = process.argv.slice(1).find((a) => !a.startsWith('-') && path.resolve(a) !== appPath && fs.existsSync(a) && fs.statSync(a).isDirectory());
-    try { if (argDir) openWorkspace(argDir); else if (s.lastFolder && fs.existsSync(s.lastFolder)) openWorkspace(s.lastFolder); } catch {}
+    try { if (argDir) openWorkspace(argDir); else if (s.reopenLastProject !== false && s.lastFolder && fs.existsSync(s.lastFolder)) openWorkspace(s.lastFolder); } catch {}
     createWindow();
     updater.init(send);
+    applyTray();
   });
 }
 

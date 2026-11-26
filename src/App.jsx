@@ -8,9 +8,29 @@ import TerminalPanel from './components/TerminalPanel.jsx';
 import ChatView, { Popover } from './components/ChatView.jsx';
 import HomeSidebar from './components/HomeSidebar.jsx';
 import Palette from './components/Palette.jsx';
-import { SettingsModal, DiffModal, Welcome } from './components/Modals.jsx';
+import { DiffModal, Welcome } from './components/Modals.jsx';
+import SettingsPage from './components/SettingsPage.jsx';
+import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
+import { resolveModel } from './components/ModelPicker.jsx';
 import { languageFor } from './lib/lang.js';
-import { useChats, chats as store, activeChat } from './lib/chatStore.js';
+import { useChats, chats as store, activeChat, getState as getChatState } from './lib/chatStore.js';
+const useChatsSnapshot = getChatState;
+
+// Short two-note chime (no audio files needed).
+function chime(attention) {
+  try {
+    const ctx = new AudioContext();
+    const notes = attention ? [880, 660] : [660, 990];
+    notes.forEach((f, i) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      const t = ctx.currentTime + i * 0.14;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.18, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + 0.4);
+    });
+    setTimeout(() => ctx.close(), 1200);
+  } catch {}
+}
 
 const api = window.kstrl;
 const cleanErr = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
@@ -42,6 +62,7 @@ export default function App() {
   const [agentOpen, setAgentOpen] = useState(true);
   const [palette, setPalette] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(null);
+  const [homePage, setHomePage] = useState('chat'); // chat | automations
   const [diff, setDiff] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [moreMenu, setMoreMenu] = useState(null);
@@ -87,6 +108,26 @@ export default function App() {
     const off = api.fs.onTree(() => { clearTimeout(t); t = setTimeout(refreshFiles, 800); });
     return () => { off(); clearTimeout(t); };
   }, [refreshFiles]);
+
+  // Appearance
+  useEffect(() => { document.documentElement.style.zoom = String((settings.uiScale || 100) / 100); }, [settings.uiScale]);
+
+  // Notifications + completion sound when Kestrel finishes or needs approval
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  useEffect(() => api.agent.onEvent((ev) => {
+    if (ev.type !== 'done' && ev.type !== 'approval') return;
+    const s = settingsRef.current;
+    const chat = useChatsSnapshot().chats.find((c) => c.id === ev.chatId);
+    const title = ev.type === 'approval' ? 'Kestrel needs approval' : 'Kestrel finished';
+    const body = ev.type === 'approval' ? `Run: ${ev.command}` : chat?.title || 'Your task is done';
+    if (s.completionSound) chime(ev.type === 'approval');
+    if (s.systemNotifications !== false && !document.hasFocus()) {
+      try { const n = new Notification(title, { body, silent: true }); n.onclick = () => { window.focus(); store.setActive(ev.chatId); }; } catch {}
+    }
+  }), []);
+
+  useEffect(() => api.onCommand((c) => { if (c === 'newchat') { setSettingsOpen(null); setMainView('home'); setHomePage('chat'); store.newChat(null); } }), []);
 
   const updateSettings = useCallback(async (patch) => {
     const { apiKey, unslothKey, ...visible } = patch;
@@ -169,9 +210,31 @@ export default function App() {
     catch (e) { toast(cleanErr(e)); }
   }, [workspace, pickFolder, openFile, toast]);
 
+  // ---------- automations ----------
+  const runAutomation = useCallback(async (a, why) => {
+    const s = settingsRef.current;
+    const busy = getChatState().chats.some((c) => c.running);
+    if (why === 'schedule' && busy) return; // try again on the next tick
+    let ws = workspace;
+    if (a.project && a.project !== workspace?.root) {
+      if (busy) { toast(`“${a.name}” needs ${a.project.split(/[\\/]/).pop()} open — wait for the running chat to finish`); return; }
+      try { ws = await api.workspace.open(a.project); await adopt(ws); } catch (e) { toast(`Automation “${a.name}”: ${cleanErr(e)}`); return; }
+    }
+    const list = (s.automations || []).map((x) => (x.id === a.id ? { ...x, lastRun: Date.now() } : x));
+    updateSettings({ automations: list });
+    store.newChat(ws?.root ?? null);
+    const eff = { ...s, model: a.model || s.model, mode: a.mode };
+    const { model, auto } = resolveModel(info, eff, { text: a.prompt, mode: a.mode });
+    const effort = (info?.efforts || []).find((e) => e.id === s.effort);
+    store.send({ text: a.prompt, title: `⚡ ${a.name}`, context: [], model: model && { id: model.id, name: auto ? `${model.name} · Auto` : model.name }, effort, mode: a.mode, project: ws?.root ?? null });
+    if (why === 'manual') { setSettingsOpen(null); setMainView('home'); setHomePage('chat'); }
+    else toast(`Automation started: ${a.name}`);
+  }, [workspace, info, toast, updateSettings]);
+  useAutomationScheduler(settings, runAutomation);
+
   // ---------- chat helpers ----------
   const focusChat = useCallback(() => setTimeout(() => (mainView === 'home' ? homeChatRef : agentRef).current?.focus(), 40), [mainView]);
-  const newChat = useCallback(() => { store.newChat(workspace?.root ?? null); if (mainView === 'ide') setAgentOpen(true); focusChat(); }, [workspace, mainView, focusChat]);
+  const newChat = useCallback(() => { setSettingsOpen(null); setHomePage('chat'); store.newChat(workspace?.root ?? null); if (mainView === 'ide') setAgentOpen(true); focusChat(); }, [workspace, mainView, focusChat]);
   const showAgent = useCallback(() => { if (mainView === 'ide') setAgentOpen(true); focusChat(); }, [mainView, focusChat]);
   const addSelectionToChat = useCallback(() => {
     const sel = editorRef.current?.getSelection();
@@ -306,12 +369,12 @@ export default function App() {
   const isHome = mainView === 'home';
   const chatProps = {
     info, settings, onSettings: updateSettings, workspace, activePath: active, files, onOpenFile: openFile, onOpenDiff: setDiff,
-    onOpenSettings: () => setSettingsOpen(settings.configured ? 'general' : 'server'), onToast: toast,
+    onOpenSettings: () => setSettingsOpen(settings.configured ? 'general' : 'server'), onToast: toast, onManageModels: () => setSettingsOpen('models'),
     onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent,
   };
 
   return (
-    <div className="app">
+    <div className={'app' + (settings.reduceTransparency ? ' reduce-transparency' : '')}>
       <div className="bg-orbs" aria-hidden="true"><span className="o1" /><span className="o2" /><span className="o3" /></div>
       <TitleBar menus={menus} />
       <div className="toolbar">
@@ -321,14 +384,18 @@ export default function App() {
         <button className="icon-btn" title="Back" disabled={!store.canBack(chatState)} onClick={() => store.back()}><ArrowLeft size={15} /></button>
         <button className="icon-btn" title="Forward" disabled={!store.canForward(chatState)} onClick={() => store.forward()}><ArrowRight size={15} /></button>
         <span className="toolbar-title">{isHome ? (activeChat(chatState).items.length ? activeChat(chatState).title : '') : workspace ? workspace.name : ''}</span>
-        <button className={'view-toggle' + (isHome ? '' : ' grad')} title={isHome ? 'Open the IDE (Ctrl+E)' : 'Back to Agents Home (Ctrl+Shift+H)'} onClick={() => setMainView(isHome ? 'ide' : 'home')}>
+        <button className="view-toggle" title={isHome ? 'Open the IDE (Ctrl+E)' : 'Back to Agents Home (Ctrl+Shift+H)'} onClick={() => setMainView(isHome ? 'ide' : 'home')}>
           {isHome ? 'IDE' : 'Agents'} <ArrowUpRight size={13} />
         </button>
         <button className="icon-btn" title="More" onClick={(e) => setMoreMenu(e.currentTarget)}><Ellipsis size={16} /></button>
         <button className="icon-btn" title="Toggle Kestrel Panel (Ctrl+Alt+B)" style={!isHome && agentOpen ? { color: 'var(--accent)' } : null} onClick={() => { if (isHome) { setMainView('ide'); setAgentOpen(true); } else setAgentOpen((o) => !o); }}><PanelRight size={16} /></button>
       </div>
 
-      {isHome ? (
+      {settingsOpen ? (
+        <div className="body">
+          <SettingsPage info={info} settings={settings} onChange={updateSettings} onBack={() => setSettingsOpen(null)} initialTab={settingsOpen} commands={commands} />
+        </div>
+      ) : isHome ? (
         <div className="body">
           {homeSide && (
             <>
@@ -340,16 +407,23 @@ export default function App() {
                 onOpenFolder={() => pickFolder()}
                 onNewProject={newProject}
                 onOpenRecent={openRecent}
-                onCustomize={() => setSettingsOpen('kestrel')}
+                onCustomize={() => setSettingsOpen('agents')}
                 onSettings={() => setSettingsOpen('general')}
                 onServer={() => setSettingsOpen('server')}
                 onSearch={() => setPalette('files')}
+                homePage={homePage}
+                onAutomations={() => setHomePage('automations')}
+                onChats={() => setHomePage('chat')}
+                update={update}
+                onUpdate={() => (update?.status === 'available' ? api.update.download() : api.update.install())}
               />
               <div className={'resizer' + (dragHome ? ' dragging' : '')} onMouseDown={startHome} />
             </>
           )}
           <main className="home-main">
-            <ChatView ref={homeChatRef} variant="home" {...chatProps} />
+            {homePage === 'automations'
+              ? <AutomationsPage info={info} settings={settings} workspace={workspace} onChange={updateSettings} onRun={runAutomation} />
+              : <ChatView ref={homeChatRef} variant="home" {...chatProps} />}
           </main>
         </div>
       ) : (
@@ -379,7 +453,7 @@ export default function App() {
                 ) : (
                   <SearchPanel workspace={workspace} onOpenAt={openFile} focusKey={searchFocus} />
                 )}
-                {!workspace && view === 'explorer' && <div style={{ padding: 14 }}><button className="btn grad" style={{ width: '100%' }} onClick={() => pickFolder()}>Open Folder</button></div>}
+                {!workspace && view === 'explorer' && <div style={{ padding: 14 }}><button className="btn light" style={{ width: '100%' }} onClick={() => pickFolder()}>Open Folder</button></div>}
               </div>
               <div className={'resizer' + (dragSide ? ' dragging' : '')} onMouseDown={startSide} />
             </>
@@ -390,7 +464,7 @@ export default function App() {
               <Welcome info={info} settings={settings} onOpenFolder={() => pickFolder()} onOpenRecent={openRecent} onNewChat={showAgent} onTerminal={() => setPanelOpen(true)} onPalette={() => setPalette('commands')} />
             )}
             <div style={{ display: tabs.length ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
-              <EditorArea ref={editorRef} tabs={tabs} active={active} onActivate={setActive} onClose={closeTab} onDirtyChange={setDirty} onSave={saveFile} model={settings.model} fontSize={settings.fontSize} onToast={toast} onAddSelection={addSelectionToChat} />
+              <EditorArea ref={editorRef} tabs={tabs} active={active} onActivate={setActive} onClose={closeTab} minimap={settings.minimap !== false} wordWrap={!!settings.wordWrap} onDirtyChange={setDirty} onSave={saveFile} model={settings.model} fontSize={settings.fontSize} onToast={toast} onAddSelection={addSelectionToChat} />
             </div>
             {panelOpen && (
               <>
@@ -415,7 +489,7 @@ export default function App() {
           {settings.configured ? <CircleCheck size={12} color="var(--ok)" /> : <CircleAlert size={12} color="var(--warn)" />}
           {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server') : 'Connect model server'}
         </button>
-        <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span className="kestrel">{currentModel?.name || '—'}</span></button>
+        <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span className="kestrel">{settings.model === 'auto' ? 'Auto' : currentModel?.name || '—'}</span></button>
         {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
         {update?.status === 'ready' && <button className="item" style={{ color: '#ff9a9a' }} onClick={() => api.update.install()}>Restart to update</button>}
         <span className="item">{settings.mode === 'ask' ? 'Ask' : 'Agent'}</span>
@@ -447,7 +521,6 @@ export default function App() {
         </Popover>
       )}
       {palette && <Palette mode={palette} files={files} commands={commands} onClose={() => setPalette(null)} onOpenFile={openFile} />}
-      {settingsOpen && <SettingsModal info={info} settings={settings} onChange={updateSettings} onClose={() => setSettingsOpen(null)} initialTab={settingsOpen} />}
       {diff && <DiffModal diff={diff} onClose={() => setDiff(null)} onOpenFile={openFile} />}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast glass-strong">{t.text}</div>)}</div>
     </div>

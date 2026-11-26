@@ -21,7 +21,8 @@ function init(send) {
     return;
   }
   autoUpdater = require('electron-updater').autoUpdater;
-  autoUpdater.autoDownload = true;
+  const enabled = require('./settings.cjs').load().autoUpdate !== false;
+  autoUpdater.autoDownload = enabled;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('checking-for-update', () => set({ status: 'checking', error: null }));
   autoUpdater.on('update-available', (i) => set({ status: 'downloading', version: i.version, percent: 0 }));
@@ -30,14 +31,19 @@ function init(send) {
   autoUpdater.on('update-downloaded', (i) => set({ status: 'ready', version: i.version, notes: typeof i.releaseNotes === 'string' ? i.releaseNotes : '' }));
   autoUpdater.on('error', (e) => set({ status: 'error', error: String(e && e.message ? e.message : e).split('\n')[0] }));
 
-  const check = () => autoUpdater.checkForUpdates().catch(() => {});
+  autoUpdater.on('update-available', (i) => { if (!autoUpdater.autoDownload) set({ status: 'available', version: i.version }); });
+  const check = () => { if (require('./settings.cjs').load().autoUpdate !== false) autoUpdater.checkForUpdates().catch(() => {}); };
   setTimeout(check, 8000); // shortly after launch
   setInterval(check, 4 * 60 * 60 * 1000); // and every 4 hours
 }
 
+function setAuto(on) { if (autoUpdater) autoUpdater.autoDownload = !!on; }
+
+function download() { if (autoUpdater) autoUpdater.downloadUpdate().catch(() => {}); }
+
 function check() {
   if (!autoUpdater) return state;
-  autoUpdater.checkForUpdates().catch(() => {});
+  autoUpdater.checkForUpdates().then(() => { if (!autoUpdater.autoDownload && state.status === 'available') {} }).catch(() => {});
   return state;
 }
 
@@ -45,4 +51,4 @@ function install() {
   if (autoUpdater && state.status === 'ready') setImmediate(() => autoUpdater.quitAndInstall(false, true));
 }
 
-module.exports = { init, check, install, getState: () => ({ ...state, current: app.getVersion() }) };
+module.exports = { init, check, install, setAuto, download, getState: () => ({ ...state, current: app.getVersion() }) };
