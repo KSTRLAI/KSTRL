@@ -8,7 +8,7 @@ import TerminalPanel from './components/TerminalPanel.jsx';
 import ChatView, { Popover, MODES, nextMode } from './components/ChatView.jsx';
 import HomeSidebar from './components/HomeSidebar.jsx';
 import Palette from './components/Palette.jsx';
-import { DiffModal, InputDialog } from './components/Modals.jsx';
+import { DiffModal, InputDialog, ConnectApiDialog } from './components/Modals.jsx';
 import IdeWelcome from './components/IdeWelcome.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
@@ -58,6 +58,7 @@ export default function App() {
   const [workspace, setWorkspace] = useState(null);
   const [files, setFiles] = useState([]);
   const mainView = IDE ? 'ide' : 'home';
+  const [connectOpen, setConnectOpen] = useState(false); // Connect API dialog
   const [dialog, setDialog] = useState(null); // text input dialog (Electron has no window.prompt)
   const [ssh, setSsh] = useState(null); // { target, port, key } — opens an SSH terminal
   const [homeSide, setHomeSide] = useState(true);
@@ -268,6 +269,9 @@ export default function App() {
   }, [workspace, info, toast, updateSettings]);
   useAutomationScheduler(IDE ? NO_AUTOMATIONS : settings, runAutomation); // only the home window runs automations
 
+  // Connect API: send people to kstrlsi for a key, then let them paste it in.
+  const connectApi = useCallback(() => { api.shell.openExternal('https://kstrlsi.base44.app/'); setConnectOpen(true); }, []);
+
   // ---------- windows ----------
   const goIde = useCallback((payload) => { if (!IDE) api.windows.openIde(payload); }, []);
   const goHome = useCallback(() => { if (IDE) api.windows.focusHome(); }, []);
@@ -434,7 +438,7 @@ export default function App() {
   const chatProps = {
     info, settings, onSettings: updateSettings, workspace, activePath: active, files, onOpenFile: openFile, onOpenDiff: setDiff,
     onOpenSettings: () => setSettingsOpen(settings.configured ? 'general' : 'server'), onToast: toast, onManageModels: () => setSettingsOpen('models'),
-    onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent, onUsage: () => setSettingsOpen('plan'),
+    onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent, onUsage: () => setSettingsOpen('plan'), onConnect: () => connectApi(),
   };
   const upgradeVisible = settings.plan !== 'max';
 
@@ -496,7 +500,7 @@ export default function App() {
                 onOpenRecent={openRecent}
                 onCustomize={() => setSettingsOpen('agents')}
                 onSettings={() => setSettingsOpen('general')}
-                onServer={() => setSettingsOpen('server')}
+                onServer={connectApi}
                 onSearch={() => setPalette('files')}
                 homePage={homePage}
                 onAutomations={() => setHomePage('automations')}
@@ -574,20 +578,20 @@ export default function App() {
         </div>
       )}
 
-      <div className="statusbar">
+      {IDE && <div className="statusbar">
         <span className="item"><GitBranch size={12} /> {workspace ? workspace.name : 'No folder'}</span>
         {!isHome && active && <span className="item">{languageFor(active)}</span>}
         <span className="spacer" />
-        <button className="item" onClick={() => setSettingsOpen('server')} title="Model server">
+        <button className="item" onClick={() => (settings.configured ? setSettingsOpen('server') : connectApi())} title="Model server">
           {settings.configured ? <CircleCheck size={12} color="var(--ok)" /> : <CircleAlert size={12} color="var(--warn)" />}
-          {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server') : 'Connect model server'}
+          {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'KSTRL API') : 'Connect API'}
         </button>
         <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span>{modelLabel(info, settings)}</span></button>
         {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
         {update?.status === 'ready' && <button className="item strong" onClick={() => api.update.install()}>Restart to update</button>}
         {settings.usageToday && <button className="item" title="Today's usage" onClick={() => setSettingsOpen('plan')}>{Math.round(settings.usageToday.percent)}% used today</button>}
         <span className="item">{(MODES.find((m) => m.id === settings.mode) || MODES[0]).name}</span>
-      </div>
+      </div>}
 
       {update?.status === 'ready' && updateDismissed !== update.version && (
         <div className="update-banner glass-strong">
@@ -616,6 +620,7 @@ export default function App() {
         </Popover>
       )}
       {palette && <Palette mode={palette} files={files} commands={commands} onClose={() => setPalette(null)} onOpenFile={openFile} />}
+      {connectOpen && <ConnectApiDialog settings={settings} onClose={() => setConnectOpen(false)} onConnected={(s) => { setSettings(s); toast('Connected — you’re ready to chat'); }} />}
       {dialog && <InputDialog {...dialog} onClose={() => setDialog(null)} onError={(e) => toast(cleanErr(e))} />}
       {diff && <DiffModal diff={diff} onClose={() => setDiff(null)} onOpenFile={openFile} />}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast glass-strong">{t.text}</div>)}</div>

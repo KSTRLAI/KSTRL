@@ -111,12 +111,14 @@ function getApiKey() {
   return process.env.KSTRL_API_KEY || unseal(cache.apiKeyEnc) || process.env.ANTHROPIC_API_KEY || null;
 }
 
+// The KSTRL API (an OpenAI-compatible Unsloth server). The URL can ship with the app (build-config.json);
+// the API key is always the user's own, pasted in via Connect API — keys are never built in.
 function getUnsloth() {
   load();
   const own = !!cache.unslothURL;
   return {
     url: process.env.KSTRL_UNSLOTH_URL || cache.unslothURL || BUILTIN.unslothURL || '',
-    key: process.env.KSTRL_UNSLOTH_KEY || (own ? unseal(cache.unslothKeyEnc) : null) || (own ? '' : BUILTIN.unslothKey || '') || '',
+    key: process.env.KSTRL_UNSLOTH_KEY || unseal(cache.unslothKeyEnc) || '',
     builtin: !own && !!BUILTIN.unslothURL,
   };
 }
@@ -166,7 +168,9 @@ function backendFor(modelId) {
 
 function isConfigured() {
   load();
-  return cache.provider === 'anthropic' ? !!getApiKey() : !!getUnsloth().url;
+  if (cache.provider === 'anthropic') return !!getApiKey();
+  const u = getUnsloth();
+  return !!u.url && (!!u.key || !u.builtin); // the KSTRL API needs a key; a self-hosted server may not
 }
 
 function publicView() {

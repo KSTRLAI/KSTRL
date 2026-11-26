@@ -3,7 +3,7 @@ import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, Folde
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
 import Avatar from './Avatar.jsx';
-import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw } from 'lucide-react';
+import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw, KeyRound } from 'lucide-react';
 
 const SITE = 'https://kstrlsi.base44.app/';
 const ISSUES = 'https://github.com/AmirFoodDelivery/KSTRL/issues/new';
@@ -42,7 +42,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   const loose = s.chats.filter((c) => !c.project && (c.items.length || c.running) && (!filter || c.title.toLowerCase().includes(filter.toLowerCase())));
 
   const steps = [
-    { done: !!settings.configured, label: 'Connect your model server', action: 'Connect Unsloth Server', run: onServer, Icon: Server },
+    { done: !!settings.configured, label: 'Connect your API', action: 'Connect API', run: onServer, Icon: KeyRound },
     { done: !!workspace || (settings.recentFolders || []).length > 0, label: 'Open a project', action: 'Open a Project', run: onOpenFolder, Icon: FolderOpen },
     { done: !!settings.onboarded, label: 'Send your first message', action: 'Ask Kestrel', run: onNewChat, Icon: SquarePen },
   ];

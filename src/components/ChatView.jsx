@@ -449,7 +449,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
           </div>
         </div>
         {settings.showTips !== false && <Tip />}
-        <div className="home-foot">{settings.configured ? `Kestrel · ${label} · ${settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server'}` : <button className="link" onClick={onOpenSettings}>Connect your Unsloth server to start chatting →</button>}</div>
+        <div className="home-foot">{settings.configured ? `Kestrel · ${label} · ${settings.provider === 'anthropic' ? 'Anthropic API' : 'KSTRL API'}` : <button className="link" onClick={() => props.onConnect?.()}>Connect API to start chatting →</button>}</div>
         {popovers}
       </div>
     );
@@ -494,7 +494,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
               if (b.kind === 'tool') return <ToolCard key={b.toolId} block={b} onApprove={(blk, ok) => store.approve(chat.id, blk, ok)} onOpenDiff={onOpenDiff} onOpenFile={onOpenFile} />;
               if (b.kind === 'notice') return <div key={j} className="notice">{b.text}</div>;
               if (b.kind === 'error') return (
-                <div key={j} className="error-box"><CircleAlert size={15} style={{ flexShrink: 0, marginTop: 1 }} /><div>{b.text}{/Settings/.test(b.text) && <> <button className="btn" style={{ height: 22, marginLeft: 6 }} onClick={onOpenSettings}>Open Settings</button></>}</div></div>
+                <div key={j} className="error-box"><CircleAlert size={15} style={{ flexShrink: 0, marginTop: 1 }} /><div>{b.text}{/Connect API/.test(b.text) ? <> <button className="btn" style={{ height: 22, marginLeft: 6 }} onClick={() => props.onConnect?.()}>Connect API</button></> : /Settings/.test(b.text) && <> <button className="btn" style={{ height: 22, marginLeft: 6 }} onClick={onOpenSettings}>Open Settings</button></>}</div></div>
               );
               return null;
             })}

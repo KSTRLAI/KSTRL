@@ -130,7 +130,7 @@ function cleanMsg(e) { return String(e && e.message ? e.message : e); }
 function describeError(err) {
   if (err instanceof oai.ProviderError) {
     if (err.status === 0) return err.message;
-    if (err.status === 401 || err.status === 403) return 'The Unsloth server rejected the request (unauthorized). Check the API key in Settings → Model Server.';
+    if (err.status === 401 || err.status === 403) return 'Your API key was rejected. Get a new one at kstrlsi.base44.app and click Connect API to paste it in.';
     if (err.status === 404) return `The Unsloth server could not find that model or endpoint. Check the model selection in Settings → Model Server. (${err.message})`;
     return `Unsloth server error (${err.status}): ${err.message}`;
   }
@@ -355,7 +355,7 @@ class AgentManager {
       client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
     } else {
       unsloth = settings.getUnsloth();
-      if (!unsloth.url) { this.emit(chatId, { type: 'error', runId, message: 'Your Unsloth server is not connected yet. Open Settings → Model Server and add its URL.' }); return done(); }
+      if (!settings.isConfigured()) { this.emit(chatId, { type: 'error', runId, message: 'KSTRL isn\'t connected yet. Click Connect API, get your API key from kstrlsi.base44.app and paste it in.', connect: true }); return done(); }
     }
 
     let chat = this.chats.get(chatId);
@@ -469,7 +469,7 @@ class AgentManager {
         out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       } else {
         const unsloth = settings.getUnsloth();
-        if (!unsloth.url) throw new Error('Your Unsloth server is not connected yet. Open Settings → Model Server.');
+        if (!settings.isConfigured()) throw new Error('KSTRL isn\'t connected yet. Click Connect API and paste your API key.');
         const r = await oai.streamChat({
           baseURL: unsloth.url, apiKey: unsloth.key,
           body: { model: await this.serverModel(model, unsloth), messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
