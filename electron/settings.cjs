@@ -1,7 +1,7 @@
 const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MODELS } = require('./models.cjs');
+const { MODELS, MODES, PLANS } = require('./models.cjs');
 
 const file = () => path.join(app.getPath('userData'), 'kstrl-settings.json');
 
@@ -24,7 +24,7 @@ const DEFAULTS = {
   // Kestrel
   model: 'colossus-3',
   effort: 'normal',
-  mode: 'agent',
+  mode: 'build', // build | plan | ask
   autoRunCommands: false,
   customInstructions: '',
   // Workspace / UI
@@ -48,10 +48,13 @@ const DEFAULTS = {
   autoUpdate: true,
   // Stats
   usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
+  plan: 'free', // free | max
+  daily: null, // { date: 'YYYY-MM-DD', used, byModel: {}, byMode: {} }
   onboarded: false,
 };
 
 let cache = null;
+const PICKABLE = MODELS.filter((m) => !m.hidden).map((m) => m.id);
 
 function load() {
   if (cache) return cache;
@@ -60,8 +63,13 @@ function load() {
   // Colossus 2.3 was retired and 2.2 UC is now reached through the UltraCode effort.
   if (cache.model === 'colossus-2.3') cache.model = 'colossus-3';
   if (cache.model === 'colossus-2.2-uc') { cache.model = 'colossus-3'; cache.effort = 'ultracode'; }
-  if (cache.lastManualModel && !['colossus-2', 'colossus-2.1', 'colossus-3'].includes(cache.lastManualModel)) cache.lastManualModel = 'colossus-3';
-  if (Array.isArray(cache.enabledModels)) cache.enabledModels = cache.enabledModels.filter((id) => ['colossus-2', 'colossus-2.1', 'colossus-3'].includes(id));
+  if (cache.lastManualModel && !PICKABLE.includes(cache.lastManualModel)) cache.lastManualModel = 'colossus-3';
+  if (Array.isArray(cache.enabledModels)) cache.enabledModels = cache.enabledModels.filter((id) => PICKABLE.includes(id));
+  // Colossus 2.2 arrived in 1.4.0: show it to people who customised their picker before then.
+  if (!cache.has22) { if (Array.isArray(cache.enabledModels) && !cache.enabledModels.includes('colossus-2.2')) cache.enabledModels.push('colossus-2.2'); cache.has22 = true; }
+  // Agent mode became Build (and Plan) in 1.4.0.
+  if (!MODES.some((m) => m.id === cache.mode)) cache.mode = 'build';
+  for (const a of cache.automations || []) if (!MODES.some((m) => m.id === a.mode)) a.mode = 'build';
   if (Array.isArray(cache.enabledModels) && !cache.enabledModels.length) cache.enabledModels = null;
   for (const a of cache.automations || []) if (a.model === 'colossus-2.3' || a.model === 'colossus-2.2-uc') a.model = 'colossus-3';
   return cache;
@@ -113,10 +121,40 @@ function getUnsloth() {
   };
 }
 
-function recordUsage(modelId, { input = 0, output = 0 } = {}) {
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+function daily() {
+  load();
+  if (!cache.daily || cache.daily.date !== today()) cache.daily = { date: today(), used: 0, byModel: {}, byMode: {} };
+  return cache.daily;
+}
+
+function usageView() {
+  const d = daily();
+  const plan = PLANS[cache.plan] || PLANS.free;
+  const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
+  const used = Math.round(d.used * 10) / 10;
+  return { plan: plan.id, planName: plan.name, limit: plan.daily, used, left: Math.max(0, plan.daily - used), percent: Math.min(100, (used / plan.daily) * 100), resetsAt: midnight.getTime(), byModel: d.byModel, byMode: d.byMode };
+}
+
+const hasUsageLeft = () => usageView().left > 0;
+
+// Credits for one model call (see models.cjs for the formula).
+function creditsFor(modelId, mode, { input = 0, output = 0 }) {
+  const m = MODELS.find((x) => x.id === modelId);
+  const md = MODES.find((x) => x.id === mode) || MODES[0];
+  return ((input + 3 * output) / 1000) * (m?.weight ?? 1) * md.weight;
+}
+
+function recordUsage(modelId, { input = 0, output = 0 } = {}, mode = 'build') {
   load();
   const u = cache.usage[modelId] || { requests: 0, inputTokens: 0, outputTokens: 0 };
   cache.usage = { ...cache.usage, [modelId]: { requests: u.requests + 1, inputTokens: u.inputTokens + input, outputTokens: u.outputTokens + output } };
+  const d = daily();
+  const c = creditsFor(modelId, mode, { input, output });
+  d.used += c;
+  d.byModel[modelId] = (d.byModel[modelId] || 0) + c;
+  d.byMode[mode] = (d.byMode[mode] || 0) + c;
   save();
 }
 
@@ -133,9 +171,9 @@ function isConfigured() {
 
 function publicView() {
   load();
-  const { apiKeyEnc, unslothKeyEnc, ...rest } = cache;
+  const { apiKeyEnc, unslothKeyEnc, daily: _d, ...rest } = cache;
   const un = getUnsloth();
-  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), userName: require('node:os').userInfo().username };
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {
@@ -145,4 +183,4 @@ function addRecent(folder) {
   save();
 }
 
-module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured, recordUsage };
+module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured, recordUsage, hasUsageLeft, usageView };

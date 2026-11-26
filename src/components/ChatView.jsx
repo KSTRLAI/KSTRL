@@ -8,10 +8,22 @@ import {
 import { createPortal } from 'react-dom';
 import { renderMarkdown } from '../lib/markdown.js';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
-import { ModelMenu, resolveModel, modelLabel } from './ModelPicker.jsx';
+import { ModelMenu, resolveModel, modelParts, runLabel } from './ModelPicker.jsx';
 
 const api = window.kstrl;
 const EFFORT_ICON = { flash: Zap, normal: Gauge, high: Flame, max: Rocket, ultracode: Code2 };
+export const MODES = [
+  { id: 'build', name: 'Build', I: Hammer, d: 'Builds it: edits files and runs commands to finish the task.' },
+  { id: 'plan', name: 'Plan', I: ListChecks, d: 'Plan and brainstorm before building. Uses Colossus 2.1 to save usage.' },
+  { id: 'ask', name: 'Ask', I: MessageCircleQuestion, d: 'Reads and explains your code. Never changes anything.' },
+];
+export const nextMode = (m) => MODES[(MODES.findIndex((x) => x.id === m) + 1) % MODES.length].id;
+
+// White dots that pulse while Kestrel is thinking.
+export function ThinkingDots({ label = 'Thinking' }) {
+  return <div className="thinking-dots" role="status"><span className="dots"><i /><i /><i /></span>{label && <span className="lbl">{label}</span>}</div>;
+}
+
 const TOOL_ICON = { list_files: FolderTree, read_file: FileCode2, search: Search, write_file: FilePlus2, edit_file: FilePen, run_command: TermIcon };
 const TOOL_VERB = { list_files: 'List', read_file: 'Read', search: 'Search', write_file: 'Write', edit_file: 'Edit', run_command: 'Run' };
 
@@ -152,10 +164,11 @@ const TIPS = [
   ['Ctrl+K', 'in the editor rewrites the selected code inline'],
   ['Ctrl+L', 'sends your selection to Kestrel'],
   ['@', 'attaches files from your project to a message'],
-  ['Ctrl+.', 'switches between Agent and Ask mode'],
+  ['Ctrl+.', 'cycles between Build, Plan and Ask'],
+  ['Plan', 'mode brainstorms with you first and uses less of your daily usage'],
   ['Auto', 'in the model picker chooses the right Colossus model for you'],
   ['Automations', 'run Kestrel on a schedule — find them in the sidebar'],
-  ['Ctrl+E', 'opens the full IDE; Ctrl+Shift+H brings you back here'],
+  ['Ctrl+E', 'opens the IDE in its own window'],
   ['Ctrl+Shift+P', 'opens the command palette with every action'],
 ];
 
@@ -167,9 +180,9 @@ function Tip() {
 }
 
 const SUGGESTIONS = [
-  { I: Hammer, t: 'Build a prototype', d: 'Describe an app and Kestrel scaffolds it', prompt: 'Build a prototype of ', mode: 'agent' },
-  { I: ListChecks, t: 'Start with a plan', d: 'Align on implementation before writing code', prompt: 'Before writing any code, propose a step-by-step implementation plan for: ', mode: 'ask' },
-  { I: Bug, t: 'Debug an issue', d: 'Find root causes and fix tricky bugs', prompt: 'Help me debug this issue: ', mode: 'agent' },
+  { I: Hammer, t: 'Build a prototype', d: 'Describe an app and Kestrel scaffolds it', prompt: 'Build a prototype of ', mode: 'build' },
+  { I: ListChecks, t: 'Start with a plan', d: 'Brainstorm and agree on a plan before writing code', prompt: 'Help me plan: ', mode: 'plan' },
+  { I: Bug, t: 'Debug an issue', d: 'Find root causes and fix tricky bugs', prompt: 'Help me debug this issue: ', mode: 'build' },
   { I: Compass, t: 'Explain this codebase', d: 'Get a tour of how the project fits together', prompt: 'Give me a tour of this codebase: the structure, the main modules and how they fit together.', mode: 'ask', send: true },
 ];
 
@@ -188,15 +201,19 @@ const ChatView = forwardRef(function ChatView(props, ref) {
 
   const models = info?.models || [];
   const efforts = info?.efforts || [];
-  const label = modelLabel(info, settings);
+  const parts = modelParts(info, settings);
+  const label = parts.effort ? `${parts.name} ${parts.effort}` : parts.name;
   const effort = efforts.find((e) => e.id === settings.effort) || efforts[1];
-  const mode = settings.mode || 'agent';
+  const mode = MODES.some((m) => m.id === settings.mode) ? settings.mode : 'build';
+  const modeDef = MODES.find((m) => m.id === mode);
+  const usage = settings.usageToday;
+  const outOfUsage = !!usage && usage.left <= 0;
   const EffortIcon = EFFORT_ICON[effort?.id] || Gauge;
   const isHome = variant === 'home';
   const hero = isHome && chat.items.length === 0;
 
   useLayoutEffect(() => { const el = scrollRef.current; if (el && stick.current) el.scrollTop = el.scrollHeight; }, [chat]);
-  useLayoutEffect(() => { const ta = taRef.current; if (!ta) return; ta.style.height = 'auto'; ta.style.height = Math.min(hero ? 260 : 220, ta.scrollHeight) + 'px'; }, [input, hero]);
+  useLayoutEffect(() => { const ta = taRef.current; if (!ta) return; ta.style.height = 'auto'; const max = hero ? 260 : 220; ta.style.height = Math.min(max, ta.scrollHeight) + 'px'; ta.style.overflowY = ta.scrollHeight > max ? 'auto' : 'hidden'; }, [input, hero]);
   useEffect(() => { setContext([]); stick.current = true; }, [chat.id]);
 
   const addContext = useCallback((c) => {
@@ -207,9 +224,10 @@ const ChatView = forwardRef(function ChatView(props, ref) {
   const focus = () => taRef.current?.focus();
   useImperativeHandle(ref, () => ({ focus, addContext, setInput: (t) => { setInput(t); setTimeout(focus, 0); } }));
 
-  const send = async (override) => {
+  const send = async (override, modeOverride) => {
     const text = (override ?? input).trim();
-    if (!text || chat.running) return;
+    if (!text || chat.running || outOfUsage) return;
+    const mode = modeOverride || modeDef.id;
     const ctx = context;
     setInput('');
     setContext([]);
@@ -217,7 +235,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
     stick.current = true;
     if (!settings.onboarded) onSettings({ onboarded: true });
     const { model, auto } = resolveModel(info, settings, { text, contextCount: ctx.length, mode });
-    store.send({ text, context: ctx, model: model && { id: model.id, name: auto ? `${model.name} · Auto` : model.name }, effort, mode, activePath, project: workspace?.root ?? null });
+    store.send({ text, context: ctx, model: model && { id: model.id, name: runLabel(info, settings, model, auto) }, effort, mode, activePath, project: workspace?.root ?? null });
   };
 
   const revert = async (item) => {
@@ -254,7 +272,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     if (e.key === 'Escape' && chat.running) store.stop(chat.id);
-    if (e.key === '.' && e.ctrlKey) { e.preventDefault(); onSettings({ mode: mode === 'agent' ? 'ask' : 'agent' }); }
+    if (e.key === '.' && e.ctrlKey) { e.preventDefault(); onSettings({ mode: nextMode(mode) }); }
   };
 
   const openAt = (kind) => (e) => setPop({ kind, anchor: e.currentTarget });
@@ -269,6 +287,17 @@ const ChatView = forwardRef(function ChatView(props, ref) {
           <span style={{ fontSize: 11, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f}</span>
         </button>
       ))}
+    </div>
+  );
+
+  const limitBanner = outOfUsage && (
+    <div className="limit-banner glass-soft">
+      <CircleAlert size={15} />
+      <div style={{ flex: 1 }}>
+        <div className="t">You're out of usage for today</div>
+        <div className="d">Chat is back at {new Date(usage.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.{usage.plan !== 'max' && ' KSTRL MAX gives you 20× the daily usage.'}</div>
+      </div>
+      <button className="btn light" onClick={() => props.onUsage?.()}>{usage.plan !== 'max' ? 'Upgrade' : 'View usage'}</button>
     </div>
   );
 
@@ -289,22 +318,24 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         ref={taRef}
         rows={hero ? 2 : 1}
         value={input}
-        placeholder={hero ? 'Plan, Build, / for modes, @ for context' : mode === 'agent' ? 'Ask Kestrel to build, fix or change anything… (@ for context)' : 'Ask about your code… (@ for context)'}
+        placeholder={outOfUsage ? 'Out of usage for today' : hero ? 'Plan, Build, / for modes, @ for context' : { build: 'Ask Kestrel to build, fix or change anything… (@ for context)', plan: 'Brainstorm and plan with Kestrel… (@ for context)', ask: 'Ask about your code… (@ for context)' }[mode]}
         onChange={onInput}
         onKeyDown={onKeyDown}
       />
       <div className="row">
         <button className="plus-btn" title="Add context" onClick={openAt('add')}><Plus size={17} /></button>
         <button className="chip-btn on" title="Switch mode (Ctrl+.)" onClick={openAt('mode')}>
-          {mode === 'agent' ? <InfinityIcon size={13} color="var(--accent)" /> : <MessageCircleQuestion size={13} />}
-          {mode === 'agent' ? 'Agent' : 'Ask'} <ChevronDown size={11} />
+          <modeDef.I size={13} />
+          {modeDef.name} <ChevronDown size={11} />
         </button>
         <span className="spacer" />
-        <button className="model-btn" title={`Model · effort ${effort?.name || ''}`} onClick={openAt('model')}>{label}</button>
+        <button className="model-btn" title={mode === 'plan' ? 'Plan mode uses Colossus 2.1' : 'Model and effort'} onClick={openAt('model')}>
+          <span className="mn">{parts.name}</span>{parts.effort && <span className="me">{parts.effort}</span>}
+        </button>
         {chat.running ? (
           <button className="send grad stop" title="Stop (Esc)" onClick={() => store.stop(chat.id)}><Square size={11} fill="currentColor" /></button>
         ) : (
-          <button className="send grad" title="Send (Enter)" disabled={!input.trim()} onClick={() => send()}><ArrowUp size={16} strokeWidth={2.6} /></button>
+          <button className="send grad" title="Send (Enter)" disabled={!input.trim() || outOfUsage} onClick={() => send()}><ArrowUp size={16} strokeWidth={2.6} /></button>
         )}
       </div>
     </div>
@@ -334,7 +365,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
       )}
       {pop?.kind === 'mode' && (
         <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={280} below={hero}>
-          {[{ id: 'agent', name: 'Agent', I: InfinityIcon, d: 'Plans, edits files and runs commands to finish the task.' }, { id: 'ask', name: 'Ask', I: MessageCircleQuestion, d: 'Reads and explains your code. Never changes anything.' }].map((m) => (
+          {MODES.map((m) => (
             <button key={m.id} className={'opt' + (m.id === mode ? ' sel' : '')} onClick={() => { onSettings({ mode: m.id }); setPop(null); }}>
               <m.I size={14} style={{ marginTop: 2, color: 'var(--accent)' }} />
               <div style={{ flex: 1 }}><div className="n">{m.name}</div><div className="d">{m.d}</div></div>
@@ -402,12 +433,13 @@ const ChatView = forwardRef(function ChatView(props, ref) {
             <button className="chip-btn" onClick={openAt('env')}><Monitor size={13} /> This PC <ChevronDown size={11} /></button>
           </div>
           {mentionList}
+          {limitBanner}
           {composer}
           <div className="suggest-list">
             {SUGGESTIONS.map((x) => (
               <button key={x.t} className="suggest-row" onClick={() => {
                 if (x.mode !== mode) onSettings({ mode: x.mode });
-                if (x.send) send(x.prompt); else { setInput(x.prompt); setTimeout(() => { const ta = taRef.current; ta?.focus(); ta?.setSelectionRange(x.prompt.length, x.prompt.length); }, 0); }
+                if (x.send) send(x.prompt, x.mode); else { setInput(x.prompt); setTimeout(() => { const ta = taRef.current; ta?.focus(); ta?.setSelectionRange(x.prompt.length, x.prompt.length); }, 0); }
               }}>
                 <span className="suggest-ic glass-soft"><x.I size={14} /></span>
                 <span className="t">{x.t}</span>
@@ -431,9 +463,9 @@ const ChatView = forwardRef(function ChatView(props, ref) {
           <div className="empty-chat">
             <img src="./logo.png" alt="" />
             <h2>Kestrel</h2>
-            <p>{mode === 'agent' ? 'Agent mode — Kestrel can read, edit and run code in your project.' : 'Ask mode — Kestrel reads your project and answers, without changing it.'}</p>
+            <p>{{ build: 'Build mode — Kestrel can read, edit and run code in your project.', plan: 'Plan mode — brainstorm and plan with Kestrel before anything is built.', ask: 'Ask mode — Kestrel reads your project and answers, without changing it.' }[mode]}</p>
             <div className="suggestions">
-              {SUGGESTIONS.map((x) => <button key={x.t} className="glass-soft" onClick={() => { if (x.mode !== mode) onSettings({ mode: x.mode }); if (x.send) send(x.prompt); else { setInput(x.prompt); setTimeout(focus, 0); } }}>{x.t}</button>)}
+              {SUGGESTIONS.map((x) => <button key={x.t} className="glass-soft" onClick={() => { if (x.mode !== mode) onSettings({ mode: x.mode }); if (x.send) send(x.prompt, x.mode); else { setInput(x.prompt); setTimeout(focus, 0); } }}>{x.t}</button>)}
             </div>
           </div>
         )}
@@ -446,16 +478,14 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         ) : (
           <div className="msg" key={i}>
             <div className="msg-role kestrel">
-              <img src="./logo.png" alt="" /> Kestrel <span className="sub">· {it.model}{it.mode === 'ask' ? ' · ask' : ''}</span>
-              {it.running && <span className="pulse" />}
+              <img src="./logo.png" alt="" /> Kestrel <span className="sub">· {it.model}{it.mode === 'plan' ? ' · plan' : it.mode === 'ask' ? ' · ask' : ''}</span>
             </div>
-            {it.blocks.length === 0 && it.running && <div className="notice">Thinking…</div>}
             {it.blocks.map((b, j) => {
               if (b.kind === 'thinking') {
                 const live = it.running && j === it.blocks.length - 1;
                 return (
                   <details className="thinking" key={j} open={live}>
-                    <summary><Brain size={12} /> {live ? 'Thinking' : 'Thought process'} {live && <span className="pulse" />}</summary>
+                    <summary>{live ? <ThinkingDots /> : <><Brain size={12} /> Thought process</>}</summary>
                     <div className="body-t">{b.text}</div>
                   </details>
                 );
@@ -468,7 +498,15 @@ const ChatView = forwardRef(function ChatView(props, ref) {
               );
               return null;
             })}
+            {it.running && (() => {
+              const last = it.blocks[it.blocks.length - 1];
+              const streaming = last && (last.kind === 'thinking' || last.kind === 'text' || (last.kind === 'tool' && ['pending', 'running', 'approval'].includes(last.status)));
+              return streaming ? null : <ThinkingDots label={it.blocks.length ? '' : 'Thinking'} />;
+            })()}
             {!it.running && <ChangesCard item={it} onOpenDiff={onOpenDiff} onRevert={() => revert(it)} />}
+            {!it.running && it.mode === 'plan' && i === chat.items.length - 1 && it.blocks.some((b) => b.kind === 'text') && (
+              <button className="btn light build-plan" disabled={outOfUsage} onClick={() => { onSettings({ mode: 'build' }); send('Build the plan above.', 'build'); }}><Hammer size={13} /> Build this plan</button>
+            )}
             {!it.running && it.blocks.some((b) => b.kind === 'text') && (
               <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
                 <button className="icon-btn" title="Copy reply" onClick={() => navigator.clipboard.writeText(it.blocks.filter((b) => b.kind === 'text').map((b) => b.text).join('\n\n'))}><Copy size={12} /></button>
@@ -505,6 +543,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
       ) : messages}
       <div className={'composer-wrap' + (isHome ? ' thread' : '')}>
         {mentionList}
+        {limitBanner}
         {composer}
         <div className="composer-foot">Kestrel can make mistakes. Review changes before shipping.</div>
       </div>

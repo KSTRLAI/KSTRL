@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 
 const api = window.kstrl;
 let seq = 0;
-export const uid = (p) => `${p}-${Date.now().toString(36)}-${(seq++).toString(36)}`;
+export const uid = (p) => `${p}-${Date.now().toString(36)}-${(seq++).toString(36)}${Math.random().toString(36).slice(2, 6)}`; // unique across windows
 
 const newChatObj = (project = null) => ({ id: uid('chat'), title: 'New chat', project, items: [], running: false, runId: null, createdAt: Date.now() });
 

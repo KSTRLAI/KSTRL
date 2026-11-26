@@ -161,7 +161,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
   const sections = [
     { tab: 'general', title: null, rows: [
       { t: 'Plan', d: settings.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free', c: <button className="btn" onClick={() => setTab('plan')}>Manage</button> },
-      { t: 'Upgrade to KSTRL MAX', d: 'Max effort on every model, Colossus 3 flagship access and early access to new models.', c: <button className="btn grad" onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button> },
+      { t: 'Upgrade to KSTRL MAX', d: '20× the daily usage of Free, Max effort on every model and early access to new models.', c: <button className="btn grad" onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button> },
     ] },
     { tab: 'general', title: 'Startup', rows: [
       { t: 'Tips', d: 'Show rotating tips on the empty screen', c: <Toggle on={settings.showTips !== false} onChange={set('showTips')} /> },
@@ -188,10 +188,12 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
     ] },
 
     { tab: 'plan', title: null, custom: 'plan', rows: [{ t: 'Plan KSTRL Free MAX upgrade', d: '' }] },
-    { tab: 'plan', title: 'Usage on this PC', custom: 'usage', rows: [{ t: 'Usage requests tokens', d: '' }] },
+    { tab: 'plan', title: 'Today', custom: 'daily', rows: [{ t: 'Daily usage limit resets midnight credits', d: '' }] },
+    { tab: 'plan', title: 'What uses more', custom: 'costs', rows: [{ t: 'Usage cost Build Plan Ask models', d: '' }] },
+    { tab: 'plan', title: 'All-time usage on this PC', custom: 'usage', rows: [{ t: 'Usage requests tokens', d: '' }] },
 
     { tab: 'agents', title: 'Defaults', rows: [
-      { t: 'Default Mode', d: 'Agent edits files and runs commands; Ask only reads and answers', c: <Select value={settings.mode || 'agent'} options={[['agent', 'Agent'], ['ask', 'Ask']]} onChange={set('mode')} /> },
+      { t: 'Default Mode', d: 'Build edits files and runs commands; Plan brainstorms on Colossus 2.1; Ask only reads and answers', c: <Select value={settings.mode || 'build'} options={(info?.modes || []).map((m) => [m.id, m.name])} onChange={set('mode')} /> },
       { t: 'Default Effort', d: 'How hard Kestrel works on each request', c: <Select value={settings.effort || 'normal'} options={(info?.efforts || []).map((e) => [e.id, e.name])} onChange={set('effort')} /> },
       { t: 'Max Steps per Request', d: 'Kestrel stops after this many model turns in one request', c: <Stepper value={settings.maxSteps || 60} min={5} max={500} onChange={set('maxSteps')} /> },
     ] },
@@ -199,7 +201,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       { t: 'Auto-run Commands', d: 'Let Kestrel run terminal commands without asking first. Off by default.', c: <Toggle on={!!settings.autoRunCommands} onChange={set('autoRunCommands')} /> },
     ] },
     { tab: 'agents', title: 'Rules', rows: [
-      { t: 'Rules for Kestrel', d: 'Added to every conversation in Agent and Ask mode', full: true, c: <textarea className="input" rows={6} placeholder={'e.g.\n- Use TypeScript and functional React components\n- Prefer pnpm\n- Write tests with Vitest'} defaultValue={settings.customInstructions} onBlur={(e) => onChange({ customInstructions: e.target.value })} /> },
+      { t: 'Rules for Kestrel', d: 'Added to every conversation in Build, Plan and Ask mode', full: true, c: <textarea className="input" rows={6} placeholder={'e.g.\n- Use TypeScript and functional React components\n- Prefer pnpm\n- Write tests with Vitest'} defaultValue={settings.customInstructions} onBlur={(e) => onChange({ customInstructions: e.target.value })} /> },
     ] },
 
     { tab: 'models', title: 'Model Picker', rows: pickable.map((m) => {
@@ -227,21 +229,52 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
         <div className="set-card plan">
           <div className="label">Current plan</div>
           <div className="plan-name">{settings.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free'}</div>
-          <div className="set-note">Runs on your own model server — no per-message limits from KSTRL.</div>
+          <div className="set-note">{settings.plan === 'max' ? '20× the daily usage of Free.' : `${fmt(info?.plans?.free?.daily || 0)} credits a day. Resets at midnight.`}</div>
         </div>
         <div className="gold-glass plan">
           <div className="gt">KSTRL MAX</div>
           <div className="gs">Everything Kestrel can do, at full effort.</div>
-          <ul>{['Max effort on every model', 'Colossus 3 flagship access', 'Early access to new models'].map((t) => <li key={t}><Check size={12} /> {t}</li>)}</ul>
+          <ul>{['20× the daily usage of Free', 'Max effort on every model', 'Early access to new models'].map((t) => <li key={t}><Check size={12} /> {t}</li>)}</ul>
           <button className="btn black" style={{ width: '100%' }} onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button>
         </div>
       </div>
     );
+    if (s.custom === 'daily') {
+      const u = settings.usageToday || { used: 0, limit: 1, percent: 0, left: 1, resetsAt: Date.now(), byMode: {} };
+      const at = new Date(u.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return (
+        <div className="set-card" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{Math.round(u.percent)}% used</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{u.planName || 'Free'} · {fmt(Math.round(Math.min(u.used, u.limit)))} / {fmt(u.limit)} credits</div>
+          </div>
+          <div className={'usage-meter' + (u.percent >= 85 ? ' low' : '')}><span style={{ width: `${u.percent}%` }} /></div>
+          <div className="usage-meta">
+            <span>{u.left > 0 ? `Resets at ${at}` : `Out of usage — chat is back at ${at}`}</span>
+            <span>{(info?.modes || []).map((m) => `${m.name} ${fmt(Math.round(u.byMode?.[m.id] || 0))}`).join(' · ')}</span>
+          </div>
+        </div>
+      );
+    }
+    if (s.custom === 'costs') {
+      const w = (x) => `${x}×`;
+      return (
+        <div className="set-card" style={{ padding: '12px 16px 14px' }}>
+          <div className="set-note" style={{ margin: 0 }}>Each request uses credits based on its length. Build uses the most; Plan and Ask use much less. Bigger models use more.</div>
+          <div className="cost-grid">
+            {(info?.modes || []).map((m) => <div key={m.id} className="c"><div className="n">{m.name} mode</div><div className="v">{w(m.weight)} {m.id === 'plan' ? '· on Colossus 2.1' : ''}</div></div>)}
+          </div>
+          <div className="cost-grid">
+            {models.filter((m) => m.weight).map((m) => <div key={m.id} className="c"><div className="n">{m.hidden ? 'UltraCode' : m.name}</div><div className="v">{w(m.weight)}</div></div>)}
+          </div>
+        </div>
+      );
+    }
     if (s.custom === 'usage') return (
       <div className="set-card">
         <div className="usage-row head"><span>Model</span><span>Requests</span><span>Input tokens</span><span>Output tokens</span></div>
         {usageRows.map(({ m, u }) => (
-          <div key={m.id} className="usage-row"><span>{m.name}</span><span>{fmt(u.requests)}</span><span>{fmt(u.inputTokens)}</span><span>{fmt(u.outputTokens)}</span></div>
+          <div key={m.id} className="usage-row"><span>{m.hidden ? 'UltraCode' : m.name}</span><span>{fmt(u.requests)}</span><span>{fmt(u.inputTokens)}</span><span>{fmt(u.outputTokens)}</span></div>
         ))}
         <div className="usage-row total"><span>Total</span><span>{fmt(totals.requests)}</span><span>{fmt(totals.inputTokens)}</span><span>{fmt(totals.outputTokens)}</span></div>
         <div className="set-row"><div className="set-txt stack"><div className="d">Counted on this PC from what your model server reports.</div></div><button className="btn" onClick={() => onChange({ usage: {} })}><RotateCcw size={12} /> Reset</button></div>
@@ -298,7 +331,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
               <img src="./icon.png" alt="" />
               <div className="mono" style={{ letterSpacing: '.4em', fontSize: 18, paddingLeft: '.4em' }}>KSTRL</div>
               <div className="set-note">Version {info?.version} · {info?.platform === 'win32' ? 'Windows' : info?.platform}</div>
-              <p>An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by Colossus 2, the flagship Colossus 3, and Colossus 2.2 UC for UltraCode.</p>
+              <p>An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by the Colossus models — Colossus 2, 2.1, 2.2 and the flagship Colossus 3.</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 <UpdateControl />
                 <button className="btn" onClick={() => api.shell.openExternal(SITE)}>kstrlsi <ExternalLink size={12} /></button>

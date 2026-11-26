@@ -67,18 +67,22 @@ function XTerm({ id, visible, ptyMode }) {
   return <div ref={host} className="term-host" style={{ display: visible ? 'block' : 'none', height: '100%' }} />;
 }
 
-export default function TerminalPanel({ height, workspace, onHide, focusKey }) {
+export default function TerminalPanel({ height, workspace, onHide, focusKey, ssh, onToast }) {
   const [terms, setTerms] = useState([]);
   const [active, setActive] = useState(null);
 
-  const create = async () => {
-    const t = await api.term.create({ cols: 120, rows: 20 });
-    setTerms((ts) => [...ts, { id: t.id, name: t.shell.replace(/\.exe$/i, '').split(/[\\/]/).pop(), pty: t.pty }]);
-    setActive(t.id);
+  const create = async (sshOpts) => {
+    try {
+      const t = await api.term.create({ cols: 120, rows: 20, ...(sshOpts ? { ssh: { target: sshOpts.target, port: sshOpts.port } } : {}) });
+      setTerms((ts) => [...ts, { id: t.id, name: sshOpts ? t.shell : t.shell.replace(/\.exe$/i, '').split(/[\\/]/).pop(), pty: t.pty, ssh: !!sshOpts }]);
+      setActive(t.id);
+    } catch (e) { onToast?.(String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '')); }
   };
 
-  useEffect(() => { if (terms.length === 0) create(); /* first terminal */ // eslint-disable-next-line
+  useEffect(() => { if (terms.length === 0 && !ssh) create(); /* first terminal */ // eslint-disable-next-line
   }, []);
+  useEffect(() => { if (ssh) create(ssh); // eslint-disable-next-line
+  }, [ssh?.key]);
 
   // Restart terminals in the new folder when the workspace changes.
   const firstWs = useRef(true);
@@ -107,12 +111,12 @@ export default function TerminalPanel({ height, workspace, onHide, focusKey }) {
       <div className="panel-head">
         {terms.map((t, i) => (
           <button key={t.id} className={'panel-tab' + (t.id === active ? ' active' : '')} onClick={() => setActive(t.id)}>
-            {i === 0 ? 'Terminal' : `Terminal ${i + 1}`} <span style={{ opacity: 0.5 }}>{t.name}</span>
+            {t.ssh ? 'SSH' : i === 0 ? 'Terminal' : `Terminal ${i + 1}`} <span style={{ opacity: 0.5 }}>{t.name}</span>
             <span className="x" onClick={(e) => { e.stopPropagation(); kill(t.id); }}><X size={11} /></span>
           </button>
         ))}
         <span style={{ flex: 1 }} />
-        <button className="icon-btn" title="New Terminal" onClick={create}><Plus size={15} /></button>
+        <button className="icon-btn" title="New Terminal" onClick={() => create()}><Plus size={15} /></button>
         <button className="icon-btn" title="Hide Panel (Ctrl+`)" onClick={onHide}><ChevronDown size={15} /></button>
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>

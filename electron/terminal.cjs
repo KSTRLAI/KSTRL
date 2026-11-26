@@ -19,9 +19,18 @@ class TerminalManager {
     this.nextId = 1;
   }
 
-  create({ cwd, cols = 100, rows = 24 }) {
+  // ssh: { target: 'user@host', port } opens an SSH session instead of the local shell.
+  create({ cwd, cols = 100, rows = 24, ssh }) {
+    let { file, args } = defaultShell();
+    if (ssh) {
+      const target = String(ssh.target || '').trim();
+      const port = ssh.port ? String(ssh.port).trim() : '';
+      if (!/^[A-Za-z0-9_][A-Za-z0-9._-]*(@[A-Za-z0-9._:\[\]-]+)?$/.test(target)) throw new Error('Enter an SSH host like user@example.com');
+      if (port && !/^\d{1,5}$/.test(port)) throw new Error('The port must be a number');
+      file = process.platform === 'win32' ? 'ssh.exe' : 'ssh';
+      args = [...(port ? ['-p', port] : []), '--', target];
+    }
     const id = this.nextId++;
-    const { file, args } = defaultShell();
     const dir = cwd || os.homedir();
     const env = { ...process.env, TERM_PROGRAM: 'KSTRL', COLORTERM: 'truecolor' };
     if (pty) {
@@ -32,14 +41,15 @@ class TerminalManager {
     } else {
       // Fallback: no PTY available. Line-based shell with local echo handled by the renderer.
       const p = process.platform === 'win32'
-        ? spawn('powershell.exe', ['-NoLogo', '-NoExit', '-Command', '-'], { cwd: dir, env, windowsHide: true })
-        : spawn(file, ['-i'], { cwd: dir, env });
+        ? spawn(ssh ? file : 'powershell.exe', ssh ? args : ['-NoLogo', '-NoExit', '-Command', '-'], { cwd: dir, env, windowsHide: true })
+        : spawn(file, ssh ? args : ['-i'], { cwd: dir, env });
       p.stdout.on('data', (d) => this.send('term:data', { id, data: d.toString().replace(/\r?\n/g, '\r\n') }));
       p.stderr.on('data', (d) => this.send('term:data', { id, data: d.toString().replace(/\r?\n/g, '\r\n') }));
       p.on('close', (code) => { this.send('term:exit', { id, code }); this.terms.delete(id); });
+      p.on('error', (e) => this.send('term:data', { id, data: `\r\n${e.code === 'ENOENT' ? file + ' was not found on this PC' : e.message}\r\n` }));
       this.terms.set(id, { kind: 'pipe', p });
     }
-    return { id, shell: file, pty: !!pty };
+    return { id, shell: ssh ? `ssh ${ssh.target}` : file, pty: !!pty };
   }
 
   write(id, data) {

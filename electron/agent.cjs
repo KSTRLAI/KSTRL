@@ -6,7 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk').default;
 const os = require('node:os');
 const ws = require('./workspace.cjs');
 const settings = require('./settings.cjs');
-const { EFFORTS } = require('./models.cjs');
+const { EFFORTS, MODES } = require('./models.cjs');
 const oai = require('./providers/openai-compat.cjs');
 
 // Anthropic backends that accept the server-side refusal fallback parameter.
@@ -105,13 +105,24 @@ function systemPrompt(model, mode, effort, provider) {
     root
       ? `The user's project is open at: ${root}\nAll tool paths are relative to that folder. The OS is ${os.type()} ${os.release()} and commands run in ${shell}.`
       : 'No project folder is open yet. You can still answer questions; ask the user to open or create a project folder before working with files.',
-    mode === 'agent'
-      ? 'You are in Agent mode: you can read, create and edit files and run commands to complete the task end to end. Look at the relevant code before changing it, make focused edits with edit_file, and verify your work (build, tests, or re-reading the file) when it is practical. When you finish, give a short summary of what changed and anything the user should do next.'
-      : 'You are in Ask mode: you can read and search the project but not change it. Answer the question, quoting the relevant code and pointing to files with path:line references. If a change is needed, show it as a code block and suggest switching to Agent mode to apply it.',
+    {
+      build: 'You are in Build mode: you can read, create and edit files and run commands to complete the task end to end. Look at the relevant code before changing it, make focused edits with edit_file, and verify your work (build, tests, or re-reading the file) when it is practical. When you finish, give a short summary of what changed and anything the user should do next.',
+      plan: 'You are in Plan mode: help the user plan and brainstorm before any code is written. You can read and search the project but not change it. Explore the relevant code, ask clarifying questions when the goal is ambiguous, weigh options briefly with a recommendation, and end with a concrete, numbered implementation plan (files to touch, steps, risks). Do not write the full implementation. When the plan is ready, tell the user they can switch to Build mode to have it built.',
+      ask: 'You are in Ask mode: you can read and search the project but not change it. Answer the question, quoting the relevant code and pointing to files with path:line references. If a change is needed, show it as a code block and suggest switching to Build mode to apply it.',
+    }[mode],
     'Format replies in Markdown. Use fenced code blocks with a language tag. Keep explanations tight and practical.',
     provider === 'unsloth' ? EFFORT_HINT[effort] : '',
     s.customInstructions ? `User's custom instructions:\n${s.customInstructions}` : '',
   ].filter(Boolean).join('\n\n');
+}
+
+function LIMIT_MSG(short) {
+  const u = settings.usageView();
+  const t = new Date(u.resetsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (short) return `Usage resets at ${t}.`;
+  return u.plan === 'max'
+    ? `You've used all of today's KSTRL MAX usage. It resets at ${t}.`
+    : `You've used all of today's free usage. It resets at ${t} — or upgrade to KSTRL MAX for 20× more.`;
 }
 
 function cleanMsg(e) { return String(e && e.message ? e.message : e); }
@@ -139,6 +150,11 @@ class AgentManager {
     this.approvals = new Map();
     this.checkpoints = new Map();
     this.defaultModelCache = new Map(); // server url -> first model id
+  }
+
+  recordUsage(ctx, tokens) {
+    settings.recordUsage(ctx.model.id, tokens, ctx.mode);
+    this.send('settings:changed', settings.publicView());
   }
 
   emit(chatId, event) { this.send('agent:event', { chatId, ...event }); }
@@ -267,7 +283,7 @@ class AgentManager {
       if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') this.emit(chatId, { type: 'tool_pending', runId, toolId: ev.content_block.id, name: ev.content_block.name });
     });
     const message = await stream.finalMessage();
-    if (message.usage) { this.emit(chatId, { type: 'usage', runId, usage: message.usage }); settings.recordUsage(model.id, { input: message.usage.input_tokens || 0, output: message.usage.output_tokens || 0 }); }
+    if (message.usage) { this.emit(chatId, { type: 'usage', runId, usage: message.usage }); this.recordUsage(ctx, { input: (message.usage.input_tokens || 0) + (message.usage.cache_creation_input_tokens || 0), output: message.usage.output_tokens || 0 }); }
 
     if (message.stop_reason === 'refusal') {
       const kept = message.content.filter((b) => b.type !== 'tool_use');
@@ -297,7 +313,7 @@ class AgentManager {
       onToolStart: (id, name) => this.emit(chatId, { type: 'tool_pending', runId, toolId: id, name }),
     });
     if (r.usage) this.emit(chatId, { type: 'usage', runId, usage: { output_tokens: r.usage.completion_tokens || 0 } });
-    settings.recordUsage(ctx.model.id, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
+    this.recordUsage(ctx, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
     const calls = r.toolCalls.map((c) => {
       let input;
       let parseError = null;
@@ -320,14 +336,17 @@ class AgentManager {
     }
   }
 
-  async run({ chatId, runId, text, model: modelId, effort: effortId, mode }) {
+  async run({ chatId, runId, text, model: modelId, effort: effortId, mode: modeId }) {
     const s = settings.load();
     const provider = s.provider === 'anthropic' ? 'anthropic' : 'unsloth';
+    const mode = (MODES.find((m) => m.id === modeId) || MODES[0]).id; // older builds sent 'agent' → Build
     const eff = EFFORTS.find((e) => e.id === effortId) || EFFORTS[1];
-    const model = settings.backendFor(eff.model || modelId); // UltraCode effort always runs Colossus 2.2 UC
+    // Plan mode always runs Colossus 2.1 to save usage; otherwise UltraCode effort runs Colossus 2.2 UC.
+    const model = settings.backendFor(MODES.find((m) => m.id === mode).model || eff.model || modelId);
     const effort = eff.api;
 
     const done = () => this.emit(chatId, { type: 'done', runId, changed: this.checkpoints.has(runId) ? [...this.checkpoints.get(runId).keys()] : [] });
+    if (!settings.hasUsageLeft()) { this.emit(chatId, { type: 'error', runId, limit: true, message: LIMIT_MSG() }); return done(); }
     let unsloth = null;
     let client = null;
     if (provider === 'anthropic') {
@@ -349,17 +368,18 @@ class AgentManager {
     chat.controller = controller;
     chat.messages.push({ role: 'user', content: text });
 
-    const tools = mode === 'agent' ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
+    const tools = mode === 'build' ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
     const toolByName = Object.fromEntries(tools.map((t) => [t.name, t]));
     const system = systemPrompt(model, mode, effort, provider);
     let retries = 0;
     let turns = 0;
 
     try {
-      const ctx = { client, unsloth, model, effort, system, tools, chatId, runId, signal: controller.signal };
+      const ctx = { client, unsloth, model, effort, mode, system, tools, chatId, runId, signal: controller.signal };
       if (provider === 'unsloth') ctx.modelId = await this.serverModel(model, unsloth, controller.signal);
       while (true) {
         const maxSteps = Math.max(5, Math.min(500, s.maxSteps || 60));
+        if (turns > 0 && !settings.hasUsageLeft()) { this.emit(chatId, { type: 'error', runId, limit: true, message: 'You ran out of usage for today, so Kestrel stopped here. ' + LIMIT_MSG(true) }); break; }
         if (++turns > maxSteps) { this.emit(chatId, { type: 'error', runId, message: `Stopped after ${maxSteps} steps. Send a follow-up to continue (limit is in Settings → Agents).` }); break; }
         this.emit(chatId, { type: 'turn_start', runId });
 
@@ -431,6 +451,8 @@ class AgentManager {
   async inlineEdit({ instruction, code, language, path: filePath, before, after, model: modelId }) {
     const s = settings.load();
     const model = settings.backendFor(modelId);
+    if (!settings.hasUsageLeft()) throw new Error(LIMIT_MSG());
+    const ctx = { model, mode: 'build' };
     const system = 'You are the inline code editor inside KSTRL. Rewrite the selected code according to the instruction. Reply with ONLY the replacement code for the selection — no explanations and no Markdown fences. Preserve the surrounding indentation style.';
     const user = `File: ${filePath || 'untitled'} (${language})\n\n<before_selection>\n${before}\n</before_selection>\n<selection>\n${code}\n</selection>\n<after_selection>\n${after}\n</after_selection>\n\nInstruction: ${instruction}`;
     let out;
@@ -442,6 +464,7 @@ class AgentManager {
         const params = { model: model.backend, max_tokens: 32000, thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, system, messages: [{ role: 'user', content: user }] };
         if (FALLBACK_OK.has(model.backend)) { params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
         const msg = await client.beta.messages.stream(params).finalMessage();
+        if (msg.usage) this.recordUsage(ctx, { input: msg.usage.input_tokens || 0, output: msg.usage.output_tokens || 0 });
         if (msg.stop_reason === 'refusal') throw new Error('The model declined this edit.');
         out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       } else {
@@ -452,6 +475,7 @@ class AgentManager {
           body: { model: await this.serverModel(model, unsloth), messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
           onText: () => {}, onThinking: () => {}, onToolStart: () => {},
         });
+        this.recordUsage(ctx, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
         out = r.text;
       }
     } catch (e) { throw new Error(describeError(e)); }

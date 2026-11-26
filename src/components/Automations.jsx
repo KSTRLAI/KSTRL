@@ -74,7 +74,7 @@ function Editor({ initial, info, settings, onSave, onCancel }) {
           <label><span className="label">Time</span><input className="input" type="time" value={a.schedule.time || '09:00'} onChange={(e) => up({ schedule: { ...a.schedule, time: e.target.value } })} /></label>
         )}
         <label><span className="label">Mode</span>
-          <select className="input" value={a.mode} onChange={(e) => up({ mode: e.target.value })}><option value="agent">Agent</option><option value="ask">Ask</option></select>
+          <select className="input" value={a.mode} onChange={(e) => up({ mode: e.target.value })}>{(info?.modes || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
         </label>
         <label><span className="label">Model</span>
           <select className="input" value={a.model} onChange={(e) => up({ model: e.target.value })}>
@@ -83,7 +83,7 @@ function Editor({ initial, info, settings, onSave, onCancel }) {
           </select>
         </label>
       </div>
-      <div className="auto-note">Scheduled runs happen while KSTRL is open. In Agent mode, commands still ask for approval unless auto-run is on in Settings → Agents.</div>
+      <div className="auto-note">Scheduled runs happen while KSTRL is open. In Build mode, commands still ask for approval unless auto-run is on in Settings → Agents.</div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn" onClick={onCancel}>Cancel</button>
         <button className="btn light" disabled={!a.name.trim() || !a.prompt.trim()} onClick={() => onSave({ ...a, name: a.name.trim(), prompt: a.prompt.trim() })}>Save</button>
@@ -103,7 +103,7 @@ export default function AutomationsPage({ info, settings, workspace, onChange, o
     onChange({ automations: exists ? list.map((x) => (x.id === a.id ? fresh : x)) : [...list, fresh] });
     setEditing(null);
   };
-  const blank = () => ({ id: 'auto-' + Date.now().toString(36), name: '', prompt: '', project: workspace?.root || null, schedule: { type: 'daily', time: '09:00' }, mode: 'agent', model: 'auto', enabled: true, lastRun: 0 });
+  const blank = () => ({ id: 'auto-' + Date.now().toString(36), name: '', prompt: '', project: workspace?.root || null, schedule: { type: 'daily', time: '09:00' }, mode: 'build', model: 'auto', enabled: true, lastRun: 0 });
 
   return (
     <div className="auto-page">
@@ -134,7 +134,7 @@ export default function AutomationsPage({ info, settings, workspace, onChange, o
                 <div className="meta">
                   <span><Clock size={11} /> {describeSchedule(a)}</span>
                   <span><Folder size={11} /> {base(a.project)}</span>
-                  <span>{a.mode === 'ask' ? 'Ask' : 'Agent'} · {a.model === 'auto' ? 'Auto' : (info?.models || []).find((m) => m.id === a.model)?.name}</span>
+                  <span>{(info?.modes || []).find((m) => m.id === a.mode)?.name || 'Build'} · {a.model === 'auto' ? 'Auto' : (info?.models || []).find((m) => m.id === a.model)?.name}</span>
                   {a.ran && a.lastRun ? <span>Last run {new Date(a.lastRun).toLocaleString()}</span> : null}
                 </div>
               </div>

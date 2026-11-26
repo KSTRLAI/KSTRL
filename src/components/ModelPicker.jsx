@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, ChevronRight, ChevronLeft, Info, Wand2, SlidersHorizontal } from 'lucide-react';
 
 // Flagship first, like the reference dropdown.
-const ORDER = ['colossus-3', 'colossus-2.1', 'colossus-2'];
+const ORDER = ['colossus-3', 'colossus-2.2', 'colossus-2.1', 'colossus-2'];
 const NOTE = { 'colossus-3': 'Flagship' };
 
 export const enabledModels = (info, settings) => {
@@ -12,10 +12,16 @@ export const enabledModels = (info, settings) => {
   return list.length ? list : all;
 };
 
-// Picks the model for a request: UltraCode effort → Colossus 2.2 UC; "Auto" → by task size.
+// Picks the model for a request: Plan → Colossus 2.1 (saves usage); UltraCode effort → Colossus 2.2 UC;
+// "Auto" → by task size. The main process applies the same Plan/UltraCode rules.
 export function resolveModel(info, settings, { text = '', contextCount = 0, mode } = {}) {
+  const all = info?.models || [];
+  if ((mode || settings.mode) === 'plan') {
+    const m = all.find((x) => x.id === 'colossus-2.1');
+    if (m) return { model: m, auto: false };
+  }
   if (settings.effort === 'ultracode') {
-    const uc = (info?.models || []).find((m) => m.id === 'colossus-2.2-uc');
+    const uc = all.find((m) => m.id === 'colossus-2.2-uc');
     if (uc) return { model: uc, auto: false };
   }
   const list = enabledModels(info, settings);
@@ -23,16 +29,34 @@ export function resolveModel(info, settings, { text = '', contextCount = 0, mode
   const pick = (...ids) => ids.map((id) => list.find((m) => m.id === id)).find(Boolean) || list[0];
   const effort = settings.effort;
   let m;
-  if (effort === 'max' || effort === 'high' || contextCount > 1 || text.length >= 600) m = pick('colossus-3', 'colossus-2.1', 'colossus-2');
-  else if (mode === 'agent' || contextCount > 0 || text.length >= 220) m = pick('colossus-2.1', 'colossus-3', 'colossus-2');
-  else m = pick('colossus-2', 'colossus-2.1', 'colossus-3');
+  if (effort === 'max' || contextCount > 2 || text.length >= 1200) m = pick('colossus-3', 'colossus-2.2', 'colossus-2.1', 'colossus-2');
+  else if (effort === 'high' || contextCount > 1 || text.length >= 600) m = pick('colossus-2.2', 'colossus-3', 'colossus-2.1', 'colossus-2');
+  else if (mode === 'build' || contextCount > 0 || text.length >= 220) m = pick('colossus-2.1', 'colossus-2.2', 'colossus-3', 'colossus-2');
+  else m = pick('colossus-2', 'colossus-2.1', 'colossus-2.2', 'colossus-3');
   return { model: m, auto: true };
 }
 
+// What the model button shows: the model in white and the effort in grey ("Colossus 3  High").
+// UltraCode shows as an effort, never as "Colossus 2.2 UC".
+export function modelParts(info, settings) {
+  const effort = (info?.efforts || []).find((e) => e.id === settings.effort);
+  let name;
+  if (settings.mode === 'plan') name = 'Colossus 2.1';
+  else if (settings.model === 'auto') name = 'Auto';
+  else name = (info?.models || []).find((m) => m.id === settings.model)?.name || 'Model';
+  return { name, effort: effort?.name || '' };
+}
+
+// Name shown on a reply. UltraCode runs Colossus 2.2 UC under the hood but is shown as an effort.
+export function runLabel(info, settings, model, auto) {
+  if (!model) return '';
+  if (model.id === 'colossus-2.2-uc') return `${modelParts(info, settings).name} · UltraCode`;
+  return auto ? `${model.name} · Auto` : model.name;
+}
+
 export function modelLabel(info, settings) {
-  if (settings.effort === 'ultracode') return 'Colossus 2.2 UC';
-  if (settings.model === 'auto') return 'Auto';
-  return (info?.models || []).find((m) => m.id === settings.model)?.name || 'Model';
+  const p = modelParts(info, settings);
+  return p.effort ? `${p.name} ${p.effort}` : p.name;
 }
 
 export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
@@ -40,9 +64,9 @@ export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
   const list = enabledModels(info, settings);
   const efforts = info?.efforts || [];
   const effort = efforts.find((e) => e.id === settings.effort) || efforts[1];
-  const uc = settings.effort === 'ultracode';
+  const plan = settings.mode === 'plan';
 
-  const choose = (m) => { onSettings({ model: m.id, ...(uc ? { effort: 'normal' } : {}) }); onClose(); };
+  const choose = (m) => { onSettings({ model: m.id }); onClose(); };
 
   // Number keys pick a model, like the reference.
   useEffect(() => {
@@ -73,17 +97,11 @@ export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
     <div className="mmenu">
       <button className="mm-back" onClick={() => setView('models')}><ChevronLeft size={15} /> More models</button>
       <div className="mm-sep" />
-      <button className="mm-item" onClick={() => { onSettings({ model: 'auto', ...(uc ? { effort: 'normal' } : {}) }); onClose(); }}>
+      <button className="mm-item" onClick={() => { onSettings({ model: 'auto' }); onClose(); }}>
         <Wand2 size={15} className="lead" />
         <span className="nm">Auto</span>
         <span className="desc">Picks a Colossus model for each request</span>
-        {settings.model === 'auto' && !uc ? <Check size={16} className="ck" /> : <span className="num" />}
-      </button>
-      <button className="mm-item" onClick={() => { onSettings({ effort: 'ultracode' }); onClose(); }}>
-        <span className="lead-txt">UC</span>
-        <span className="nm">Colossus 2.2 UC</span>
-        <span className="desc">Turns on UltraCode effort</span>
-        {uc ? <Check size={16} className="ck" /> : <span className="num" />}
+        {settings.model === 'auto' ? <Check size={16} className="ck" /> : <span className="num" />}
       </button>
       <div className="mm-sep" />
       <button className="mm-item" onClick={() => { onClose(); onManage(); }}>
@@ -95,8 +113,9 @@ export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
 
   return (
     <div className="mmenu">
+      {plan && <div className="mm-hint">Plan mode always uses Colossus 2.1 to save usage. Your pick applies to Build and Ask.</div>}
       {list.map((m, i) => {
-        const sel = !uc && settings.model === m.id;
+        const sel = settings.model === m.id;
         return (
           <button key={m.id} className={'mm-item' + (sel ? ' sel' : '')} onClick={() => choose(m)} title={m.description}>
             <span className="nm">{m.name}</span>
@@ -117,7 +136,7 @@ export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
       <button className="mm-item" onClick={() => setView('more')}>
         <span className="nm">More models</span>
         <span className="sp" />
-        {(settings.model === 'auto' || uc) && <span className="val">{uc ? 'Colossus 2.2 UC' : 'Auto'}</span>}
+        {settings.model === 'auto' && <span className="val">Auto</span>}
         <ChevronRight size={16} className="chev" />
       </button>
     </div>

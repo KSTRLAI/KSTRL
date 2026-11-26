@@ -1,20 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Files, Search, Bot, Settings as SettingsIcon, TerminalSquare, GitBranch, Sparkles, CircleCheck, CircleAlert, PanelLeft, ArrowLeft, ArrowRight, ArrowUpRight, Ellipsis, PanelRight } from 'lucide-react';
+import { Files, Search, Bot, Settings as SettingsIcon, TerminalSquare, GitBranch, Sparkles, CircleCheck, CircleAlert, PanelLeft, ArrowLeft, ArrowRight, ArrowUpRight, Ellipsis, PanelRight, Plus, PanelBottom, MessageSquare } from 'lucide-react';
 import TitleBar from './components/TitleBar.jsx';
 import Explorer from './components/Explorer.jsx';
 import SearchPanel from './components/SearchPanel.jsx';
 import EditorArea, { ensureDoc, disposeDoc, docs, isDirty } from './components/EditorArea.jsx';
 import TerminalPanel from './components/TerminalPanel.jsx';
-import ChatView, { Popover } from './components/ChatView.jsx';
+import ChatView, { Popover, MODES, nextMode } from './components/ChatView.jsx';
 import HomeSidebar from './components/HomeSidebar.jsx';
 import Palette from './components/Palette.jsx';
-import { DiffModal, Welcome } from './components/Modals.jsx';
+import { DiffModal, InputDialog } from './components/Modals.jsx';
+import IdeWelcome from './components/IdeWelcome.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
-import { resolveModel, modelLabel } from './components/ModelPicker.jsx';
+import { resolveModel, modelLabel, runLabel } from './components/ModelPicker.jsx';
 import { languageFor } from './lib/lang.js';
 import { useChats, chats as store, activeChat, getState as getChatState } from './lib/chatStore.js';
 const useChatsSnapshot = getChatState;
+const NO_AUTOMATIONS = { automations: [] };
 
 // Short two-note chime (no audio files needed).
 function chime(attention) {
@@ -33,6 +35,8 @@ function chime(attention) {
 }
 
 const api = window.kstrl;
+// The IDE opens in its own window, which loads this same app with #ide.
+const IDE = window.location.hash === '#ide';
 const cleanErr = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 
 function useDrag(onMove) {
@@ -50,10 +54,12 @@ function useDrag(onMove) {
 
 export default function App() {
   const [info, setInfo] = useState(null);
-  const [settings, setSettings] = useState({ model: 'colossus-3', effort: 'normal', mode: 'agent', fontSize: 14, recentFolders: [], provider: 'unsloth' });
+  const [settings, setSettings] = useState({ model: 'colossus-3', effort: 'normal', mode: 'build', fontSize: 14, recentFolders: [], provider: 'unsloth' });
   const [workspace, setWorkspace] = useState(null);
   const [files, setFiles] = useState([]);
-  const [mainView, setMainView] = useState('home'); // home | ide
+  const mainView = IDE ? 'ide' : 'home';
+  const [dialog, setDialog] = useState(null); // text input dialog (Electron has no window.prompt)
+  const [ssh, setSsh] = useState(null); // { target, port, key } — opens an SSH terminal
   const [homeSide, setHomeSide] = useState(true);
   const [view, setView] = useState('explorer'); // IDE sidebar: explorer | search | null
   const [tabs, setTabs] = useState([]);
@@ -109,6 +115,17 @@ export default function App() {
     return () => { off(); clearTimeout(t); };
   }, [refreshFiles]);
 
+  // Keep both windows in sync: settings (incl. usage) and the open project.
+  useEffect(() => api.settings.onChanged(setSettings), []);
+  const wsRef = useRef(null);
+  wsRef.current = workspace;
+  useEffect(() => api.workspace.onChanged((ws) => {
+    if ((ws?.root || null) === (wsRef.current?.root || null)) return;
+    if (ws) adopt(ws); else { resetEditors(); setWorkspace(null); }
+    // eslint-disable-next-line
+  }), []);
+  useEffect(() => { if (IDE) { document.title = 'KSTRL'; document.body.style.background = '#1b1b1b'; } }, []);
+
   // Appearance
   useEffect(() => { document.documentElement.style.zoom = String((settings.uiScale || 100) / 100); }, [settings.uiScale]);
 
@@ -119,6 +136,7 @@ export default function App() {
     if (ev.type !== 'done' && ev.type !== 'approval') return;
     const s = settingsRef.current;
     const chat = useChatsSnapshot().chats.find((c) => c.id === ev.chatId);
+    if (!chat) return; // another window's chat
     const title = ev.type === 'approval' ? 'Kestrel needs approval' : 'Kestrel finished';
     const body = ev.type === 'approval' ? `Run: ${ev.command}` : chat?.title || 'Your task is done';
     if (s.completionSound) chime(ev.type === 'approval');
@@ -127,7 +145,10 @@ export default function App() {
     }
   }), []);
 
-  useEffect(() => api.onCommand((c) => { if (c === 'newchat') { setSettingsOpen(null); setMainView('home'); setHomePage('chat'); store.newChat(null); } }), []);
+  useEffect(() => api.onCommand((c) => {
+    if (c === 'newchat' && !IDE) { setSettingsOpen(null); setHomePage('chat'); store.newChat(null); }
+    if (c?.type === 'ide-open' && IDE) ideOpenRef.current?.(c);
+  }), []);
 
   const updateSettings = useCallback(async (patch) => {
     const { apiKey, unslothKey, ...visible } = patch;
@@ -139,13 +160,13 @@ export default function App() {
 
   // ---------- files & tabs ----------
   const openFile = useCallback(async (path, line) => {
+    if (!IDE) { api.windows.openIde({ file: path, line }); return; } // files open in the IDE window
     if (!docs.has(path)) {
       try { ensureDoc(path, await api.fs.readFile(path)); }
       catch (e) { toast(`Can't open ${path}: ${cleanErr(e)}`); return; }
     }
     setTabs((ts) => (ts.some((t) => t.path === path) ? ts : [...ts, { path, dirty: false }]));
     setActive(path);
-    setMainView('ide');
     if (line) setTimeout(() => editorRef.current?.revealLine(line), 60);
   }, [toast]);
 
@@ -195,20 +216,35 @@ export default function App() {
   }, [toast]);
   const newProject = useCallback(async () => {
     const ws = await pickFolder({ title: 'Choose or create an empty folder for your new project', button: 'Use This Folder' });
-    if (ws) { store.newChat(ws.root); setMainView('home'); setTimeout(() => homeChatRef.current?.focus(), 50); }
+    if (ws) { store.newChat(ws.root); if (IDE) setAgentOpen(true); setTimeout(() => (IDE ? agentRef : homeChatRef).current?.focus(), 60); }
   }, [pickFolder]);
   const openRecent = useCallback(async (dir) => {
     try { await adopt(await api.workspace.open(dir)); } catch (e) { toast(cleanErr(e)); }
   }, [toast]);
   const closeFolder = useCallback(async () => { await api.workspace.close(); resetEditors(); setWorkspace(null); }, []);
 
-  const newUntitled = useCallback(async () => {
+  const newUntitled = useCallback(() => {
     if (!workspace) { pickFolder(); return; }
-    const name = prompt('New file name (relative to the project root):', 'untitled.txt');
-    if (!name) return;
-    try { await api.fs.create(name.replace(/\\/g, '/'), false); openFile(name.replace(/\\/g, '/')); }
-    catch (e) { toast(cleanErr(e)); }
-  }, [workspace, pickFolder, openFile, toast]);
+    setDialog({
+      title: 'New File', desc: 'Relative to the project root.', value: 'untitled.txt', button: 'Create',
+      run: async (name) => { const p = name.replace(/\\/g, '/'); await api.fs.create(p, false); openFile(p); },
+    });
+  }, [workspace, pickFolder, openFile]);
+
+  const cloneRepo = useCallback(() => setDialog({
+    title: 'Clone Repository', desc: 'Paste a Git URL. You will choose where to put it next.', placeholder: 'https://github.com/owner/repo.git', button: 'Clone',
+    run: async (url) => { toast('Cloning…'); const ws = await api.git.clone(url); if (ws) { await adopt(ws); toast(`Cloned ${ws.name}`); } },
+  }), [toast]);
+
+  const connectSsh = useCallback(() => setDialog({
+    title: 'Connect via SSH', desc: 'Opens an SSH session in the terminal. Add :port if it is not 22.', placeholder: 'user@host', button: 'Connect',
+    run: async (v) => {
+      const m = v.trim().match(/^([A-Za-z0-9_][A-Za-z0-9._-]*(?:@[A-Za-z0-9._-]+)?)(?::(\d{1,5}))?$/);
+      if (!m) throw new Error('Enter a host like user@example.com or user@example.com:2222');
+      setSsh({ target: m[1], port: m[2] || '', key: Date.now() });
+      setPanelOpen(true);
+    },
+  }), []);
 
   // ---------- automations ----------
   const runAutomation = useCallback(async (a, why) => {
@@ -226,11 +262,25 @@ export default function App() {
     const eff = { ...s, model: a.model || s.model, mode: a.mode };
     const { model, auto } = resolveModel(info, eff, { text: a.prompt, mode: a.mode });
     const effort = (info?.efforts || []).find((e) => e.id === s.effort);
-    store.send({ text: a.prompt, title: `⚡ ${a.name}`, context: [], model: model && { id: model.id, name: auto ? `${model.name} · Auto` : model.name }, effort, mode: a.mode, project: ws?.root ?? null });
-    if (why === 'manual') { setSettingsOpen(null); setMainView('home'); setHomePage('chat'); }
+    store.send({ text: a.prompt, title: `⚡ ${a.name}`, context: [], model: model && { id: model.id, name: runLabel(info, eff, model, auto) }, effort, mode: a.mode, project: ws?.root ?? null });
+    if (why === 'manual') { setSettingsOpen(null); setHomePage('chat'); }
     else toast(`Automation started: ${a.name}`);
   }, [workspace, info, toast, updateSettings]);
-  useAutomationScheduler(settings, runAutomation);
+  useAutomationScheduler(IDE ? NO_AUTOMATIONS : settings, runAutomation); // only the home window runs automations
+
+  // ---------- windows ----------
+  const goIde = useCallback((payload) => { if (!IDE) api.windows.openIde(payload); }, []);
+  const goHome = useCallback(() => { if (IDE) api.windows.focusHome(); }, []);
+  // Actions the home window asks the IDE window to do.
+  const ideOpenRef = useRef(null);
+  ideOpenRef.current = (c) => {
+    if (c.file) openFile(c.file, c.line);
+    if (c.action === 'search') { setView('search'); setSearchFocus((n) => n + 1); }
+    if (c.action === 'explorer') setView('explorer');
+    if (c.action === 'terminal') setPanelOpen(true);
+    if (c.action === 'agent') { setAgentOpen(true); setTimeout(() => agentRef.current?.focus(), 60); }
+  };
+  useEffect(() => { if (IDE) api.windows.idePending().then((c) => c && setTimeout(() => ideOpenRef.current(c), 200)); }, []);
 
   // ---------- chat helpers ----------
   const focusChat = useCallback(() => setTimeout(() => (mainView === 'home' ? homeChatRef : agentRef).current?.focus(), 40), [mainView]);
@@ -249,8 +299,8 @@ export default function App() {
   // ---------- commands ----------
   const commands = useMemo(() => [
     { id: 'newchat', label: 'Kestrel: New Chat', kbd: 'Ctrl+N', run: newChat },
-    { id: 'home', label: 'View: Agents Home', kbd: 'Ctrl+Shift+H', run: () => setMainView('home') },
-    { id: 'ide', label: 'View: Open IDE', kbd: 'Ctrl+E', run: () => setMainView('ide') },
+    { id: 'home', label: 'View: Agents Home', kbd: 'Ctrl+Shift+H', run: goHome },
+    { id: 'ide', label: 'View: Open IDE Window', kbd: 'Ctrl+E', run: () => goIde() },
     { id: 'newproject', label: 'File: New Project from Scratch…', run: newProject },
     { id: 'open', label: 'File: Open Folder…', kbd: 'Ctrl+O', run: () => pickFolder() },
     { id: 'new', label: 'File: New File…', kbd: 'Ctrl+Alt+N', run: newUntitled },
@@ -259,16 +309,19 @@ export default function App() {
     { id: 'closetab', label: 'View: Close Editor', kbd: 'Ctrl+W', run: () => active && closeTab(active) },
     { id: 'closefolder', label: 'File: Close Folder', run: closeFolder },
     { id: 'quick', label: 'Go to File…', kbd: 'Ctrl+P', run: () => setPalette('files') },
-    { id: 'search', label: 'Search: Find in Files', kbd: 'Ctrl+Shift+F', run: () => { setMainView('ide'); setView('search'); setSearchFocus((n) => n + 1); } },
-    { id: 'explorer', label: 'View: Show Explorer', kbd: 'Ctrl+Shift+E', run: () => { setMainView('ide'); setView('explorer'); } },
+    { id: 'search', label: 'Search: Find in Files', kbd: 'Ctrl+Shift+F', run: () => (IDE ? (setView('search'), setSearchFocus((n) => n + 1)) : goIde({ action: 'search' })) },
+    { id: 'explorer', label: 'View: Show Explorer', kbd: 'Ctrl+Shift+E', run: () => (IDE ? setView('explorer') : goIde({ action: 'explorer' })) },
     { id: 'sidebar', label: 'View: Toggle Sidebar', kbd: 'Ctrl+B', run: () => (mainView === 'home' ? setHomeSide((v) => !v) : setView((v) => (v ? null : 'explorer'))) },
-    { id: 'terminal', label: 'View: Toggle Terminal', kbd: 'Ctrl+`', run: () => { setMainView('ide'); setPanelOpen((o) => !o); } },
+    { id: 'terminal', label: 'View: Toggle Terminal', kbd: 'Ctrl+`', run: () => (IDE ? setPanelOpen((o) => !o) : goIde({ action: 'terminal' })) },
+    { id: 'clone', label: 'Git: Clone Repository…', run: () => (IDE ? cloneRepo() : goIde()) },
+    { id: 'ssh', label: 'Remote: Connect via SSH…', run: () => (IDE ? connectSsh() : goIde()) },
     { id: 'agent', label: 'Kestrel: Focus Chat', kbd: 'Ctrl+I', run: showAgent },
     { id: 'agentToggle', label: 'Kestrel: Toggle Agent Panel', kbd: 'Ctrl+Alt+B', run: () => setAgentOpen((o) => !o) },
     { id: 'inline', label: 'Kestrel: Edit Selection Inline', kbd: 'Ctrl+K', run: () => editorRef.current?.openInline() },
     { id: 'addsel', label: 'Kestrel: Add Selection to Chat', kbd: 'Ctrl+L', run: addSelectionToChat },
-    { id: 'mode', label: 'Kestrel: Toggle Agent / Ask Mode', kbd: 'Ctrl+.', run: () => updateSettings({ mode: settings.mode === 'agent' ? 'ask' : 'agent' }) },
-    ...(info?.models || []).map((m) => ({ id: 'model-' + m.id, label: `Kestrel: Use ${m.name} (${m.tag})`, run: () => updateSettings({ model: m.id }) })),
+    { id: 'mode', label: 'Kestrel: Next Mode (Build / Plan / Ask)', kbd: 'Ctrl+.', run: () => updateSettings({ mode: nextMode(settings.mode) }) },
+    ...MODES.map((m) => ({ id: 'mode-' + m.id, label: `Kestrel: ${m.name} Mode`, run: () => updateSettings({ mode: m.id }) })),
+    ...(info?.models || []).filter((m) => !m.hidden).map((m) => ({ id: 'model-' + m.id, label: `Kestrel: Use ${m.name} (${m.tag})`, run: () => updateSettings({ model: m.id }) })),
     ...(info?.efforts || []).map((e) => ({ id: 'effort-' + e.id, label: `Kestrel: Effort ${e.name}`, run: () => updateSettings({ effort: e.id }) })),
     { id: 'settings', label: 'Preferences: Open Settings', kbd: 'Ctrl+,', run: () => setSettingsOpen('general') },
     { id: 'server', label: 'Preferences: Model Server (Unsloth)', run: () => setSettingsOpen('server') },
@@ -276,7 +329,7 @@ export default function App() {
     { id: 'zoomout', label: 'View: Decrease Editor Font Size', kbd: 'Ctrl+-', run: () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }) },
     { id: 'about', label: 'Help: About KSTRL', run: () => setSettingsOpen('about') },
     { id: 'site', label: 'Help: Visit kstrlsi', run: () => api.shell.openExternal('https://kstrlsi.base44.app/') },
-  ], [newChat, newProject, pickFolder, newUntitled, active, saveFile, tabs, closeTab, closeFolder, mainView, showAgent, addSelectionToChat, updateSettings, settings, info]);
+  ], [newChat, newProject, pickFolder, newUntitled, active, saveFile, tabs, closeTab, closeFolder, mainView, showAgent, addSelectionToChat, updateSettings, settings, info, goIde, goHome, cloneRepo, connectSsh]);
 
   const cmd = (id) => commands.find((c) => c.id === id)?.run();
 
@@ -323,6 +376,8 @@ export default function App() {
       { label: 'New Chat', kbd: 'Ctrl+N', run: newChat },
       { label: 'New Project from Scratch…', run: newProject },
       { label: 'Open Folder…', kbd: 'Ctrl+O', run: () => pickFolder() },
+      { label: 'Clone Repository…', run: () => cmd('clone') },
+      { label: 'Connect via SSH…', run: () => cmd('ssh') },
       { label: 'New File…', kbd: 'Ctrl+Alt+N', run: newUntitled },
       '-',
       { label: 'Save', kbd: 'Ctrl+S', run: () => cmd('save'), disabled: !active },
@@ -342,8 +397,7 @@ export default function App() {
       { label: 'Edit Selection with Kestrel', kbd: 'Ctrl+K', run: () => cmd('inline'), disabled: !active || mainView !== 'ide' },
     ] },
     { label: 'View', items: [
-      { label: 'Agents Home', kbd: 'Ctrl+Shift+H', run: () => setMainView('home') },
-      { label: 'IDE', kbd: 'Ctrl+E', run: () => setMainView('ide') },
+      ...(IDE ? [{ label: 'Agents Home', kbd: 'Ctrl+Shift+H', run: goHome }] : [{ label: 'Open IDE Window', kbd: 'Ctrl+E', run: () => goIde() }]),
       '-',
       { label: 'Command Palette…', kbd: 'Ctrl+Shift+P', run: () => setPalette('commands') },
       { label: 'Go to File…', kbd: 'Ctrl+P', run: () => setPalette('files') },
@@ -352,6 +406,16 @@ export default function App() {
       { label: 'Toggle Terminal', kbd: 'Ctrl+`', run: () => cmd('terminal') },
       { label: 'Toggle Kestrel Panel', kbd: 'Ctrl+Alt+B', run: () => cmd('agentToggle') },
     ] },
+    ...(IDE ? [
+      { label: 'Go', items: [
+        { label: 'Go to File…', kbd: 'Ctrl+P', run: () => setPalette('files') },
+        { label: 'Find in Files', kbd: 'Ctrl+Shift+F', run: () => cmd('search') },
+      ] },
+      { label: 'Terminal', items: [
+        { label: 'New Terminal', kbd: 'Ctrl+`', run: () => setPanelOpen(true) },
+        { label: 'Connect via SSH…', run: connectSsh },
+      ] },
+    ] : []),
     { label: 'Help', items: [
       { label: 'Visit kstrlsi', run: () => cmd('site') },
       { label: 'All Commands & Shortcuts', run: () => setPalette('commands') },
@@ -370,26 +434,49 @@ export default function App() {
   const chatProps = {
     info, settings, onSettings: updateSettings, workspace, activePath: active, files, onOpenFile: openFile, onOpenDiff: setDiff,
     onOpenSettings: () => setSettingsOpen(settings.configured ? 'general' : 'server'), onToast: toast, onManageModels: () => setSettingsOpen('models'),
-    onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent,
+    onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent, onUsage: () => setSettingsOpen('plan'),
   };
+  const upgradeVisible = settings.plan !== 'max';
 
   return (
-    <div className={'app' + (settings.reduceTransparency ? ' reduce-transparency' : '')}>
+    <div className={'app' + (IDE ? ' ide-window' : '') + (settings.reduceTransparency ? ' reduce-transparency' : '')}>
       <div className="bg-orbs" aria-hidden="true"><span className="o1" /><span className="o2" /><span className="o3" /></div>
-      <TitleBar menus={menus} />
-      <div className="toolbar">
-        <button className="icon-btn" title="Toggle Sidebar (Ctrl+B)" onClick={() => cmd('sidebar')}><PanelLeft size={16} /></button>
-        <button className="icon-btn" title="Search (Ctrl+P)" onClick={() => setPalette('files')}><Search size={15} /></button>
-        <span style={{ flex: isHome ? `0 0 ${Math.max(0, (homeSide ? homeW : 0) - 132)}px` : '0 0 8px' }} />
-        <button className="icon-btn" title="Back" disabled={!store.canBack(chatState)} onClick={() => store.back()}><ArrowLeft size={15} /></button>
-        <button className="icon-btn" title="Forward" disabled={!store.canForward(chatState)} onClick={() => store.forward()}><ArrowRight size={15} /></button>
-        <span className="toolbar-title">{isHome ? (activeChat(chatState).items.length ? activeChat(chatState).title : '') : workspace ? workspace.name : ''}</span>
-        <button className="view-toggle" title={isHome ? 'Open the IDE (Ctrl+E)' : 'Back to Agents Home (Ctrl+Shift+H)'} onClick={() => setMainView(isHome ? 'ide' : 'home')}>
-          {isHome ? 'IDE' : 'Agents'} <ArrowUpRight size={13} />
-        </button>
-        <button className="icon-btn" title="More" onClick={(e) => setMoreMenu(e.currentTarget)}><Ellipsis size={16} /></button>
-        <button className="icon-btn" title="Toggle Kestrel Panel (Ctrl+Alt+B)" style={!isHome && agentOpen ? { color: 'var(--accent)' } : null} onClick={() => { if (isHome) { setMainView('ide'); setAgentOpen(true); } else setAgentOpen((o) => !o); }}><PanelRight size={16} /></button>
-      </div>
+      {IDE ? (
+        <TitleBar
+          menus={menus}
+          brand={false}
+          title={workspace ? `${workspace.name} — KSTRL` : 'KSTRL'}
+          left={<>
+            <span className="tb-sep" />
+            <button className="icon-btn" title="Toggle Sidebar (Ctrl+B)" disabled={!workspace} onClick={() => cmd('sidebar')}><PanelLeft size={16} /></button>
+            <button className="icon-btn" title="Agents Home (Ctrl+Shift+H)" onClick={goHome}><ArrowLeft size={15} /></button>
+          </>}
+          right={<>
+            {upgradeVisible && <button className="tb-upgrade" onClick={() => setSettingsOpen('plan')}>Upgrade</button>}
+            <button className="icon-btn" title="New Chat (Ctrl+N)" onClick={newChat}><Plus size={17} /></button>
+            <button className="icon-btn" title="Toggle Terminal (Ctrl+`)" style={panelOpen ? { color: '#fff' } : null} onClick={() => setPanelOpen((o) => !o)}><PanelBottom size={16} /></button>
+            <button className="icon-btn" title="Toggle Kestrel Panel (Ctrl+Alt+B)" style={agentOpen && workspace ? { color: '#fff' } : null} onClick={() => { setAgentOpen((o) => !o); }}><MessageSquare size={15} /></button>
+            <button className="icon-btn" title="Settings (Ctrl+,)" onClick={() => setSettingsOpen((v) => (v ? null : 'general'))}><SettingsIcon size={16} /></button>
+          </>}
+        />
+      ) : (
+        <>
+          <TitleBar menus={menus} />
+          <div className="toolbar">
+            <button className="icon-btn" title="Toggle Sidebar (Ctrl+B)" onClick={() => cmd('sidebar')}><PanelLeft size={16} /></button>
+            <button className="icon-btn" title="Search (Ctrl+P)" onClick={() => setPalette('files')}><Search size={15} /></button>
+            <span style={{ flex: `0 0 ${Math.max(0, (homeSide ? homeW : 0) - 132)}px` }} />
+            <button className="icon-btn" title="Back" disabled={!store.canBack(chatState)} onClick={() => store.back()}><ArrowLeft size={15} /></button>
+            <button className="icon-btn" title="Forward" disabled={!store.canForward(chatState)} onClick={() => store.forward()}><ArrowRight size={15} /></button>
+            <span className="toolbar-title">{activeChat(chatState).items.length ? activeChat(chatState).title : ''}</span>
+            <button className="view-toggle" title="Open the IDE in a new window (Ctrl+E)" onClick={() => goIde()}>
+              IDE <ArrowUpRight size={13} />
+            </button>
+            <button className="icon-btn" title="More" onClick={(e) => setMoreMenu(e.currentTarget)}><Ellipsis size={16} /></button>
+            <button className="icon-btn" title="Open Kestrel in the IDE" onClick={() => goIde({ action: 'agent' })}><PanelRight size={16} /></button>
+          </div>
+        </>
+      )}
 
       {settingsOpen ? (
         <div className="body">
@@ -430,16 +517,16 @@ export default function App() {
         </div>
       ) : (
         <div className="body">
-          <div className="activitybar glass-pane">
+          {workspace && <div className="activitybar glass-pane">
             <button className={'act' + (view === 'explorer' ? ' active' : '')} title="Explorer (Ctrl+Shift+E)" onClick={() => setView((v) => (v === 'explorer' ? null : 'explorer'))}><Files size={20} /></button>
             <button className={'act' + (view === 'search' ? ' active' : '')} title="Search (Ctrl+Shift+F)" onClick={() => { setView((v) => (v === 'search' ? null : 'search')); setSearchFocus((n) => n + 1); }}><Search size={20} /></button>
             <button className={'act' + (agentOpen ? ' active' : '')} title="Kestrel Agent (Ctrl+I)" onClick={() => setAgentOpen((o) => !o)}><Bot size={20} /></button>
             <button className={'act' + (panelOpen ? ' active' : '')} title="Terminal (Ctrl+`)" onClick={() => setPanelOpen((o) => !o)}><TerminalSquare size={20} /></button>
             <div className="spacer" />
             <button className="act" title="Settings (Ctrl+,)" onClick={() => setSettingsOpen('general')}><SettingsIcon size={20} /></button>
-          </div>
+          </div>}
 
-          {view && (
+          {view && workspace && (
             <>
               <div className="sidebar glass-pane" style={{ width: sideW }}>
                 {view === 'explorer' ? (
@@ -463,7 +550,11 @@ export default function App() {
 
           <div className="main">
             {tabs.length === 0 && (
-              <Welcome info={info} settings={settings} onOpenFolder={() => pickFolder()} onOpenRecent={openRecent} onNewChat={showAgent} onTerminal={() => setPanelOpen(true)} onPalette={() => setPalette('commands')} />
+              <IdeWelcome
+                settings={settings} workspace={workspace}
+                onOpenFolder={() => pickFolder()} onClone={cloneRepo} onSsh={connectSsh} onOpenRecent={openRecent}
+                onUpgrade={() => setSettingsOpen('plan')} onFiles={() => setPalette('files')} onChat={showAgent} onTerminal={() => setPanelOpen(true)}
+              />
             )}
             <div style={{ display: tabs.length ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column' }}>
               <EditorArea ref={editorRef} tabs={tabs} active={active} onActivate={setActive} onClose={closeTab} minimap={settings.minimap !== false} wordWrap={!!settings.wordWrap} onDirtyChange={setDirty} onSave={saveFile} model={settings.model} fontSize={settings.fontSize} onToast={toast} onAddSelection={addSelectionToChat} />
@@ -471,13 +562,13 @@ export default function App() {
             {panelOpen && (
               <>
                 <div className={'resizer h' + (dragPanel ? ' dragging' : '')} onMouseDown={startPanel} />
-                <TerminalPanel height={panelH} workspace={workspace} onHide={() => setPanelOpen(false)} />
+                <TerminalPanel height={panelH} workspace={workspace} ssh={ssh} onHide={() => { setPanelOpen(false); setSsh(null); }} onToast={toast} />
               </>
             )}
           </div>
 
-          <div className={'resizer' + (dragAgent ? ' dragging' : '')} onMouseDown={startAgent} style={{ display: agentOpen ? 'block' : 'none' }} />
-          <div className="agent-dock glass-pane" style={{ width: agentW, display: agentOpen ? 'flex' : 'none' }}>
+          <div className={'resizer' + (dragAgent ? ' dragging' : '')} onMouseDown={startAgent} style={{ display: agentOpen && workspace ? 'block' : 'none' }} />
+          <div className="agent-dock glass-pane" style={{ width: agentW, display: agentOpen && workspace ? 'flex' : 'none' }}>
             <ChatView ref={agentRef} variant="panel" {...chatProps} onClosePanel={() => setAgentOpen(false)} />
           </div>
         </div>
@@ -494,7 +585,8 @@ export default function App() {
         <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span>{modelLabel(info, settings)}</span></button>
         {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
         {update?.status === 'ready' && <button className="item strong" onClick={() => api.update.install()}>Restart to update</button>}
-        <span className="item">{settings.mode === 'ask' ? 'Ask' : 'Agent'}</span>
+        {settings.usageToday && <button className="item" title="Today's usage" onClick={() => setSettingsOpen('plan')}>{Math.round(settings.usageToday.percent)}% used today</button>}
+        <span className="item">{(MODES.find((m) => m.id === settings.mode) || MODES[0]).name}</span>
       </div>
 
       {update?.status === 'ready' && updateDismissed !== update.version && (
@@ -515,7 +607,8 @@ export default function App() {
             ['Command Palette', () => setPalette('commands')],
             ['Model Server', () => setSettingsOpen('server')],
             ['Settings', () => setSettingsOpen('general')],
-            ['Open Terminal', () => { setMainView('ide'); setPanelOpen(true); }],
+            ['Open IDE Window', () => goIde()],
+            ['Open Terminal', () => goIde({ action: 'terminal' })],
             ['About KSTRL', () => setSettingsOpen('about')],
           ].map(([label, run]) => (
             <button key={label} className="opt" onClick={() => { setMoreMenu(null); run(); }}><div className="n" style={{ fontFamily: 'var(--sans)', fontWeight: 500 }}>{label}</div></button>
@@ -523,6 +616,7 @@ export default function App() {
         </Popover>
       )}
       {palette && <Palette mode={palette} files={files} commands={commands} onClose={() => setPalette(null)} onOpenFile={openFile} />}
+      {dialog && <InputDialog {...dialog} onClose={() => setDialog(null)} onError={(e) => toast(cleanErr(e))} />}
       {diff && <DiffModal diff={diff} onClose={() => setDiff(null)} onOpenFile={openFile} />}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast glass-strong">{t.text}</div>)}</div>
     </div>

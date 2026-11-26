@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
+import Avatar from './Avatar.jsx';
 import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw } from 'lucide-react';
 
 const SITE = 'https://kstrlsi.base44.app/';
@@ -114,7 +115,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
 
       <div className="hs-user">
         <button className="hs-acct" title="Account" onClick={(e) => setAcct(acct ? null : e.currentTarget)}>
-          <span className="avatar">{(settings.userName || 'K')[0].toUpperCase()}</span>
+          <Avatar size={28} />
           <span className="name">{settings.userName || 'You'}</span>
         </button>
         {(update?.status === 'ready' || update?.status === 'available') && <button className="btn grad update-btn" title={`KSTRL ${update.version}`} onClick={onUpdate}><ArrowUpCircle size={13} /> Update</button>}

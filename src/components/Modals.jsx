@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, KeyRound, CircleCheck, FolderOpen, MessageSquarePlus, TerminalSquare, Command, ExternalLink, Check, Server, Cloud, PlugZap, Loader2 } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { monaco } from '../lib/monaco.js';
 import { languageFor } from '../lib/lang.js';
 
@@ -38,43 +38,26 @@ export function DiffModal({ diff, onClose, onOpenFile }) {
   );
 }
 
-export function Welcome({ info, settings, onOpenFolder, onOpenRecent, onNewChat, onTerminal, onPalette }) {
-  const models = (info?.models || []).filter((m) => !m.hidden);
+// Small text-input dialog (Electron has no window.prompt).
+export function InputDialog({ title, desc, value = '', placeholder, button = 'OK', run, onClose, onError }) {
+  const [v, setV] = useState(value);
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!v.trim() || busy) return;
+    setBusy(true);
+    try { await run(v.trim()); onClose(); } catch (e) { onError?.(e); setBusy(false); }
+  };
   return (
-    <div className="welcome">
-      <div className="welcome-inner">
-        <div className="hero">
-          <img src="./logo.png" alt="KSTRL" />
-          <h1>KSTRL</h1>
-          <div className="tagline">The AI coding environment. Built to move at the speed your task needs — from a quick fix to an afternoon of deep work.</div>
-        </div>
-        <div className="grid">
-          <div className="card glass">
-            <h3 className="label">Start</h3>
-            <button className="action" onClick={onOpenFolder}><span className="ic"><FolderOpen size={16} /></span><span><div className="t">Open Folder</div><div className="d">Ctrl+O · work on an existing project</div></span></button>
-            <button className="action" onClick={onNewChat}><span className="ic"><MessageSquarePlus size={16} /></span><span><div className="t">Ask Kestrel</div><div className="d">Ctrl+I · build something new with the agent</div></span></button>
-            <button className="action" onClick={onTerminal}><span className="ic"><TerminalSquare size={16} /></span><span><div className="t">New Terminal</div><div className="d">Ctrl+` · PowerShell in the KSTRL environment</div></span></button>
-            <button className="action" onClick={onPalette}><span className="ic"><Command size={16} /></span><span><div className="t">Command Palette</div><div className="d">Ctrl+Shift+P · every action, one search away</div></span></button>
-          </div>
-          <div className="card glass">
-            <h3 className="label">Recent</h3>
-            <div className="recent">
-              {settings.recentFolders?.length ? settings.recentFolders.map((f) => (
-                <button key={f} onClick={() => onOpenRecent(f)}>
-                  <span>{f.split(/[\\/]/).pop()}</span>
-                  <span className="p">{f}</span>
-                </button>
-              )) : <div style={{ color: 'var(--text-3)', fontSize: 12.5, padding: 10 }}>No recent folders yet.</div>}
-            </div>
-          </div>
-        </div>
-        <div className="model-list">
-          {models.map((m) => (
-            <div key={m.id} className={'model-chip glass-soft' + (m.tag === 'Flagship' ? ' flag' : '')}>
-              <div className="n">{m.name}</div>
-              <div className="t">{m.tag}</div>
-            </div>
-          ))}
+    <div className="overlay center" onMouseDown={onClose}>
+      <div className="input-dialog glass-strong" onMouseDown={(e) => e.stopPropagation()}>
+        <h3>{title}</h3>
+        {desc && <p>{desc}</p>}
+        <input className="input" autoFocus value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)}
+          onFocus={(e) => { const i = e.target.value.lastIndexOf('.'); e.target.setSelectionRange(0, i > 0 ? i : e.target.value.length); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose(); }} />
+        <div className="row">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn light" disabled={!v.trim() || busy} onClick={submit}>{busy ? <Loader2 size={13} className="spin" /> : null}{button}</button>
         </div>
       </div>
     </div>

@@ -5,19 +5,31 @@
 | Model | Best for |
 | --- | --- |
 | **Colossus 2** | Quick edits, explanations, everyday questions |
-| **Colossus 2.1** | Balanced speed and quality for everyday coding |
+| **Colossus 2.1** | Balanced speed and quality for everyday coding. Plan mode always uses it. |
+| **Colossus 2.2** | Stronger coding and reasoning for larger tasks |
 | **Colossus 3** (Flagship) | Maximum capability for the hardest work |
-| **Colossus 2.2 UC** | Heavy coding. It isn't in the model picker; it's used when you set the effort to **UltraCode** |
+| **Colossus 2.2 UC** | Heavy coding. It isn't in the model picker; it runs when you set the effort to **UltraCode**, which the UI shows as an effort level |
 
 Effort levels: **Flash · Normal · High · Max · UltraCode**.
 
+Modes: **Build** (edits files and runs commands), **Plan** (brainstorm and plan, read-only, on Colossus 2.1) and **Ask** (read-only answers).
+
+## Daily usage
+
+Each request costs credits = (input tokens + 3 × output tokens) / 1000 × model weight × mode weight. Free gets 2,500 credits a day and KSTRL MAX gets 20× that (50,000). When they run out, chat is paused until midnight (local time). Weights live in `electron/models.cjs`:
+
+- Modes: Build 1×, Plan 0.5×, Ask 0.35×
+- Models: Colossus 2 0.5×, 2.1 1×, 2.2 1.6×, UltraCode 2.5×, Colossus 3 4×
+
+The plan is stored in the local settings file and the renderer can't change it. There is no billing yet, so the Upgrade buttons open the website.
+
 ## Features
 
-- **Agents home**: a chat-first start screen with projects, chat history, Getting Started, and a centered composer. Switch to the full editor with **IDE ↗** (`Ctrl+E`).
-- **Model picker**: Colossus 3, 2.1 and 2, with number-key shortcuts. **Effort** and **More models** (Auto, Colossus 2.2 UC) are submenus.
+- **Agents home**: a chat-first start screen with projects, chat history, Getting Started, and a centered composer. **IDE ↗** (`Ctrl+E`) opens the editor in its own window, with Open project, Clone repo and Connect via SSH on its start screen.
+- **Model picker**: Colossus 3, 2.2, 2.1 and 2, with number-key shortcuts. **Effort** (including UltraCode) and **More models** (Auto) are submenus. The button shows the model and the effort, e.g. "Colossus 3 High".
 - **Automations**: saved prompts that Kestrel runs on demand, at startup, hourly, daily or on weekdays while KSTRL is open.
 - **Settings** (`Ctrl+,`) is a full page with search. Tabs: General, Appearance, Plan & Usage, Agents, Models, Keyboard Shortcuts and About.
-- **Kestrel Agent panel** (`Ctrl+I`). Use **Agent** mode to read, write and edit files and run commands, or **Ask** mode for read-only answers. Kestrel streams its thought process and shows every tool call as a card.
+- **Kestrel Agent panel** (`Ctrl+I`). Use **Build** mode to read, write and edit files and run commands, **Plan** to brainstorm a plan first, or **Ask** for read-only answers. Kestrel streams its thought process and shows every tool call as a card.
 - **Change review.** Every file Kestrel touches gets a +/- diffstat and a side-by-side diff. You can **Revert all** for any run.
 - **Command approval.** Kestrel asks before it runs a terminal command. You can turn on auto-run in Settings.
 - **Inline edit** (`Ctrl+K`). Select some code, describe the change, then Accept or Reject it.

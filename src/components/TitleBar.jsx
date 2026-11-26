@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-export default function TitleBar({ menus }) {
+export default function TitleBar({ menus, brand = true, title, left, right }) {
   const [open, setOpen] = useState(null); // { index, x, y }
   const ref = useRef(null);
 
@@ -21,7 +21,7 @@ export default function TitleBar({ menus }) {
   return (
     <div className="titlebar" ref={ref}>
       <img className="logo" src="./icon.png" alt="" />
-      <span className="brand">KSTRL</span>
+      {brand && <span className="brand">KSTRL</span>}
       {menus.map((m, i) => (
         <button
           key={m.label}
@@ -32,7 +32,10 @@ export default function TitleBar({ menus }) {
           {m.label}
         </button>
       ))}
+      {left && <div className="tb-tools">{left}</div>}
       <div className="center" />
+      {title && <span className="tb-title">{title}</span>}
+      {right && <div className="tb-tools">{right}</div>}
       {open && (
         <div className="dropdown glass-strong" style={{ left: open.x, top: open.y }} onMouseDown={(e) => e.stopPropagation()}>
           {menus[open.index].items.map((it, j) =>
