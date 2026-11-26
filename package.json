@@ -1,7 +1,7 @@
 {
   "name": "kstrl",
   "productName": "KSTRL",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "KSTRL \u2014 the AI coding environment powered by the Colossus models.",
   "author": "KSTRL",
   "license": "UNLICENSED",
@@ -84,14 +84,14 @@
       "shortcutName": "KSTRL",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "artifactName": "KSTRL-Setup-${version}.${ext}"
+      "artifactName": "KSTRL-Setup.${ext}"
     },
     "asarUnpack": [
       "node_modules/node-pty/**"
     ],
     "npmRebuild": false,
     "portable": {
-      "artifactName": "KSTRL-${version}-Portable.${ext}"
+      "artifactName": "KSTRL-Portable.${ext}"
     },
     "publish": [
       {

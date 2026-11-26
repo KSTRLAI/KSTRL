@@ -63,7 +63,7 @@ npm run dev        # Vite + Electron with hot reload
 On Windows:
 
 ```bash
-npm run dist:win   # → release/KSTRL-Setup-1.0.0.exe (installer) + release/KSTRL-1.0.0-Portable.exe
+npm run dist:win   # → release/KSTRL-Setup.exe (installer) + release/KSTRL-Portable.exe
 ```
 
 You can also run the **Build Windows** GitHub Action from the Actions tab, or push a `v*` tag. It builds both `.exe` files on `windows-latest` and attaches them to the run, or to the GitHub Release when you push a tag.
@@ -78,7 +78,7 @@ Installed copies of KSTRL update themselves from this repo's GitHub Releases. Th
 2. Go to **Actions → Build Windows → Run workflow**, leave **publish** checked, and run it. You can also push a matching `v1.0.1` tag instead.
 3. The action builds the installer on Windows and publishes release `v1.0.1`. Users get the update automatically.
 
-Only the installed version (`KSTRL-Setup-x.y.z.exe`) can auto-update. The portable `.exe` can't replace itself.
+Only the installed version (`KSTRL-Setup.exe`) can auto-update. The portable `.exe` can't replace itself.
 
 ## Project layout
 
@@ -87,3 +87,6 @@ electron/   main process: window, IPC, settings, workspace sandbox, terminal (no
 src/        renderer (React): editor, explorer, search, terminal, agent panel, palette, settings
 build/      icons + logo used for packaging
 ```
+
+The installer always has the same name, so this link always downloads the newest version (handy for the website):
+https://github.com/AmirFoodDelivery/KSTRL/releases/latest/download/KSTRL-Setup.exe
