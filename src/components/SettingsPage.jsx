@@ -97,13 +97,13 @@ function ServerSettings({ info, settings, onChange }) {
           </div>
           <div className="set-row">
             <div className="set-txt">
-              {test && !test.busy ? (test.ok ? <span className="status-ok"><CircleCheck size={13} /> Connected · {test.models.length} model{test.models.length === 1 ? '' : 's'} on the server</span> : <span style={{ color: '#ffb4b4', fontSize: 12.5 }}>{test.error}</span>) : <div className="d">Test the connection to load the server's models.</div>}
+              {test && !test.busy ? (test.ok ? <span className="status-ok"><CircleCheck size={13} /> Connected · {test.models.length} model{test.models.length === 1 ? '' : 's'} on the server</span> : <span className="set-error">{test.error}</span>) : <div className="d">Test the connection to load the server's models.</div>}
             </div>
             <button className="btn light" disabled={!(url.trim() || settings.usingBuiltinServer) || test?.busy} onClick={runTest}>{test?.busy ? <Loader2 size={13} className="spin" /> : <PlugZap size={13} />} Test connection</button>
           </div>
           {models.map((m) => (
             <div key={m.id} className="set-row">
-              <div className="set-txt stack"><div className="t mono">{m.name}</div><div className="d">Server model for {m.tag.toLowerCase()} requests</div></div>
+              <div className="set-txt stack"><div className="t">{m.name}</div><div className="d">{m.hidden ? 'Server model used when effort is set to UltraCode' : `Server model for ${m.name}`}</div></div>
               {serverModels.length ? (
                 <select className="input set-select mono" value={settings.unslothModels?.[m.id] || ''} onChange={(e) => onChange({ unslothModels: { ...settings.unslothModels, [m.id]: e.target.value || undefined } })}>
                   <option value="">Server default{serverModels[0] ? ` (${serverModels[0]})` : ''}</option>
@@ -131,7 +131,7 @@ function ServerSettings({ info, settings, onChange }) {
           </div>
           {models.map((m) => (
             <div key={m.id} className="set-row">
-              <div className="set-txt stack"><div className="t mono">{m.name}</div><div className="d">Backend model</div></div>
+              <div className="set-txt stack"><div className="t">{m.name}</div><div className="d">{m.hidden ? 'Backend model for UltraCode effort' : 'Backend model'}</div></div>
               <input className="input set-select mono" placeholder={m.backend} defaultValue={settings.backendOverrides?.[m.id] || ''} onBlur={(e) => onChange({ backendOverrides: { ...settings.backendOverrides, [m.id]: e.target.value.trim() || undefined } })} />
             </div>
           ))}
@@ -148,7 +148,8 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
   const [q, setQ] = useState('');
   const models = info?.models || [];
   const set = (k) => (v) => onChange({ [k]: v });
-  const enabled = Array.isArray(settings.enabledModels) ? settings.enabledModels : models.map((m) => m.id);
+  const pickable = models.filter((m) => !m.hidden);
+  const enabled = Array.isArray(settings.enabledModels) ? settings.enabledModels.filter((id) => pickable.some((m) => m.id === id)) : pickable.map((m) => m.id);
 
   useEffect(() => {
     const esc = (e) => { if (e.key === 'Escape' && !e.target.closest?.('input,textarea,select')) onBack(); };
@@ -201,7 +202,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       { t: 'Rules for Kestrel', d: 'Added to every conversation in Agent and Ask mode', full: true, c: <textarea className="input" rows={6} placeholder={'e.g.\n- Use TypeScript and functional React components\n- Prefer pnpm\n- Write tests with Vitest'} defaultValue={settings.customInstructions} onBlur={(e) => onChange({ customInstructions: e.target.value })} /> },
     ] },
 
-    { tab: 'models', title: 'Model Picker', rows: models.map((m) => {
+    { tab: 'models', title: 'Model Picker', rows: pickable.map((m) => {
       const I = TAG_ICON[m.tag] || Sparkles;
       const on = enabled.includes(m.id);
       return { t: m.name, d: m.description, icon: <I size={14} />, c: <Toggle on={on} onChange={(v) => { const next = v ? [...new Set([...enabled, m.id])] : enabled.filter((x) => x !== m.id); if (next.length) onChange({ enabledModels: next }); }} /> };
@@ -229,10 +230,10 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
           <div className="set-note">Runs on your own model server — no per-message limits from KSTRL.</div>
         </div>
         <div className="gold-glass plan">
-          <div className="mono" style={{ fontWeight: 600, letterSpacing: '.2em', fontSize: 13 }}>KSTRL MAX</div>
-          <div className="mono" style={{ fontSize: 11, opacity: 0.75, marginTop: 4 }}>Everything Kestrel can do, at full effort.</div>
-          <ul className="mono">{['Max effort on every model', 'Colossus 3 flagship access', 'Early access to new models'].map((t) => <li key={t}><Check size={12} /> {t}</li>)}</ul>
-          <button className="btn grad" style={{ width: '100%' }} onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button>
+          <div className="gt">KSTRL MAX</div>
+          <div className="gs">Everything Kestrel can do, at full effort.</div>
+          <ul>{['Max effort on every model', 'Colossus 3 flagship access', 'Early access to new models'].map((t) => <li key={t}><Check size={12} /> {t}</li>)}</ul>
+          <button className="btn black" style={{ width: '100%' }} onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button>
         </div>
       </div>
     );
@@ -240,7 +241,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       <div className="set-card">
         <div className="usage-row head"><span>Model</span><span>Requests</span><span>Input tokens</span><span>Output tokens</span></div>
         {usageRows.map(({ m, u }) => (
-          <div key={m.id} className="usage-row"><span className="mono">{m.name}</span><span>{fmt(u.requests)}</span><span>{fmt(u.inputTokens)}</span><span>{fmt(u.outputTokens)}</span></div>
+          <div key={m.id} className="usage-row"><span>{m.name}</span><span>{fmt(u.requests)}</span><span>{fmt(u.inputTokens)}</span><span>{fmt(u.outputTokens)}</span></div>
         ))}
         <div className="usage-row total"><span>Total</span><span>{fmt(totals.requests)}</span><span>{fmt(totals.inputTokens)}</span><span>{fmt(totals.outputTokens)}</span></div>
         <div className="set-row"><div className="set-txt stack"><div className="d">Counted on this PC from what your model server reports.</div></div><button className="btn" onClick={() => onChange({ usage: {} })}><RotateCcw size={12} /> Reset</button></div>

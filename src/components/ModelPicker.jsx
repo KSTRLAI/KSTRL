@@ -4,7 +4,7 @@ import { Search, Check, Zap, Code2, Brain, Sparkles, Wand2, Rocket, SlidersHoriz
 const TAG_ICON = { Fast: Zap, Ultracode: Code2, Reasoning: Brain, Flagship: Sparkles };
 
 export const enabledModels = (info, settings) => {
-  const all = info?.models || [];
+  const all = (info?.models || []).filter((m) => !m.hidden);
   const on = settings.enabledModels;
   const list = Array.isArray(on) ? all.filter((m) => on.includes(m.id)) : all;
   return list.length ? list : all;
@@ -12,19 +12,23 @@ export const enabledModels = (info, settings) => {
 
 // "Auto": pick a Colossus model for this request.
 export function resolveModel(info, settings, { text = '', contextCount = 0, mode } = {}) {
+  if (settings.effort === 'ultracode') {
+    const uc = (info?.models || []).find((m) => m.id === 'colossus-2.2-uc');
+    if (uc) return { model: uc, auto: false };
+  }
   const list = enabledModels(info, settings);
   if (settings.model !== 'auto') return { model: list.find((m) => m.id === settings.model) || list[list.length - 1], auto: false };
   const pick = (...ids) => ids.map((id) => list.find((m) => m.id === id)).find(Boolean) || list[list.length - 1];
   const effort = settings.effort;
   let m;
-  if (effort === 'max' || effort === 'high') m = pick('colossus-3', 'colossus-2.3', 'colossus-2.2-uc', 'colossus-2');
-  else if (mode === 'ask' && text.length < 220 && contextCount === 0) m = pick('colossus-2', 'colossus-2.2-uc', 'colossus-2.3', 'colossus-3');
-  else if (mode === 'agent') m = pick('colossus-2.2-uc', 'colossus-2.3', 'colossus-3', 'colossus-2');
-  else m = pick('colossus-2.3', 'colossus-2.2-uc', 'colossus-3', 'colossus-2');
+  // Quick, short questions go to Colossus 2; everything else to the flagship.
+  if (effort === 'max' || effort === 'high' || mode === 'agent' || contextCount > 0 || text.length >= 220) m = pick('colossus-3', 'colossus-2');
+  else m = pick('colossus-2', 'colossus-3');
   return { model: m, auto: true };
 }
 
 export function modelLabel(info, settings) {
+  if (settings.effort === 'ultracode') return 'Colossus 2.2 UC';
   if (settings.model === 'auto') return 'Auto';
   return (info?.models || []).find((m) => m.id === settings.model)?.name || 'Model';
 }
@@ -58,12 +62,15 @@ export function ModelMenu({ info, settings, onSettings, onClose, onManage }) {
           <div className="mm-sep" />
         </>
       )}
+      {settings.effort === 'ultracode' && !q && (
+        <div className="mm-note"><Code2 size={13} /> UltraCode effort is on, so Kestrel uses Colossus 2.2 UC. Change the effort to pick another model.</div>
+      )}
       <div className="mm-list">
         {list.map((m) => {
           const I = TAG_ICON[m.tag] || Sparkles;
           const sel = !auto && settings.model === m.id;
           return (
-            <button key={m.id} className={'mm-row' + (sel ? ' sel' : '') + (auto ? ' dim' : '')} title={m.description} onClick={() => { onSettings({ model: m.id }); onClose(); }}>
+            <button key={m.id} className={'mm-row' + (sel ? ' sel' : '') + (auto || settings.effort === 'ultracode' ? ' dim' : '')} title={m.description} onClick={() => { onSettings({ model: m.id, ...(settings.effort === 'ultracode' ? { effort: 'normal' } : {}) }); onClose(); }}>
               <span className="nm">{m.name}</span>
               <I size={12} className="tag-ic" />
               {m.tag === 'Flagship' && <span className="badge">Flagship</span>}

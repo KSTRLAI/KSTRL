@@ -2,14 +2,13 @@
 
 **KSTRL** is an AI-native coding environment for Windows. Its agent, **Kestrel**, reads your project, edits files, and runs commands in a built-in terminal. It is powered by the Colossus models.
 
-| Model | Tag | Best for |
-| --- | --- | --- |
-| **Colossus 2** | Fast | Quick edits, explanations, everyday questions |
-| **Colossus 2.2 UC** | Ultracode | Heavy coding: refactors, multi-file changes, debugging |
-| **Colossus 2.3** | Reasoning | Architecture, hard bugs, long agent runs |
-| **Colossus 3** | Flagship | Maximum capability for the hardest work |
+| Model | Best for |
+| --- | --- |
+| **Colossus 2** | Quick edits, explanations, everyday questions |
+| **Colossus 3** (Flagship) | Maximum capability for the hardest work |
+| **Colossus 2.2 UC** | Heavy coding. It isn't in the model picker; it's used when you set the effort to **UltraCode** |
 
-Effort levels (from kstrlsi): **Flash · Normal · High · Max**.
+Effort levels: **Flash · Normal · High · Max · UltraCode**.
 
 ## Features
 

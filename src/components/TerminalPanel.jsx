@@ -107,7 +107,7 @@ export default function TerminalPanel({ height, workspace, onHide, focusKey }) {
       <div className="panel-head">
         {terms.map((t, i) => (
           <button key={t.id} className={'panel-tab' + (t.id === active ? ' active' : '')} onClick={() => setActive(t.id)}>
-            {i === 0 ? 'Terminal' : `Terminal ${i + 1}`} <span style={{ opacity: 0.5, textTransform: 'none', letterSpacing: 0 }}>{t.name}</span>
+            {i === 0 ? 'Terminal' : `Terminal ${i + 1}`} <span style={{ opacity: 0.5 }}>{t.name}</span>
             <span className="x" onClick={(e) => { e.stopPropagation(); kill(t.id); }}><X size={11} /></span>
           </button>
         ))}

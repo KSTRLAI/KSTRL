@@ -172,7 +172,7 @@ const EditorArea = forwardRef(function EditorArea({ tabs, active, onActivate, on
               <span style={i === crumbs.length - 1 ? { color: 'var(--text-2)' } : null}>{c}</span>
             </React.Fragment>
           ))}
-          <span style={{ marginLeft: 'auto', fontFamily: 'var(--mono)', fontSize: 10.5 }}>Ctrl+K edit · Ctrl+L add to chat</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11.5 }}>Ctrl+K edit · Ctrl+L add to chat</span>
         </div>
       )}
       <div ref={hostRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>

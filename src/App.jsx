@@ -11,7 +11,7 @@ import Palette from './components/Palette.jsx';
 import { DiffModal, Welcome } from './components/Modals.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
-import { resolveModel } from './components/ModelPicker.jsx';
+import { resolveModel, modelLabel } from './components/ModelPicker.jsx';
 import { languageFor } from './lib/lang.js';
 import { useChats, chats as store, activeChat, getState as getChatState } from './lib/chatStore.js';
 const useChatsSnapshot = getChatState;
@@ -220,7 +220,7 @@ export default function App() {
       if (busy) { toast(`“${a.name}” needs ${a.project.split(/[\\/]/).pop()} open — wait for the running chat to finish`); return; }
       try { ws = await api.workspace.open(a.project); await adopt(ws); } catch (e) { toast(`Automation “${a.name}”: ${cleanErr(e)}`); return; }
     }
-    const list = (s.automations || []).map((x) => (x.id === a.id ? { ...x, lastRun: Date.now() } : x));
+    const list = (s.automations || []).map((x) => (x.id === a.id ? { ...x, lastRun: Date.now(), ran: true } : x));
     updateSettings({ automations: list });
     store.newChat(ws?.root ?? null);
     const eff = { ...s, model: a.model || s.model, mode: a.mode };
@@ -489,9 +489,9 @@ export default function App() {
           {settings.configured ? <CircleCheck size={12} color="var(--ok)" /> : <CircleAlert size={12} color="var(--warn)" />}
           {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server') : 'Connect model server'}
         </button>
-        <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span className="kestrel">{settings.model === 'auto' ? 'Auto' : currentModel?.name || '—'}</span></button>
+        <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span>{modelLabel(info, settings)}</span></button>
         {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
-        {update?.status === 'ready' && <button className="item" style={{ color: '#ff9a9a' }} onClick={() => api.update.install()}>Restart to update</button>}
+        {update?.status === 'ready' && <button className="item strong" onClick={() => api.update.install()}>Restart to update</button>}
         <span className="item">{settings.mode === 'ask' ? 'Ask' : 'Agent'}</span>
       </div>
 

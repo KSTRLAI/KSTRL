@@ -323,8 +323,9 @@ class AgentManager {
   async run({ chatId, runId, text, model: modelId, effort: effortId, mode }) {
     const s = settings.load();
     const provider = s.provider === 'anthropic' ? 'anthropic' : 'unsloth';
-    const model = settings.backendFor(modelId);
-    const effort = (EFFORTS.find((e) => e.id === effortId) || EFFORTS[1]).api;
+    const eff = EFFORTS.find((e) => e.id === effortId) || EFFORTS[1];
+    const model = settings.backendFor(eff.model || modelId); // UltraCode effort always runs Colossus 2.2 UC
+    const effort = eff.api;
 
     const done = () => this.emit(chatId, { type: 'done', runId, changed: this.checkpoints.has(runId) ? [...this.checkpoints.get(runId).keys()] : [] });
     let unsloth = null;

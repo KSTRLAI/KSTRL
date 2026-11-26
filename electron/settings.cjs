@@ -57,6 +57,13 @@ function load() {
   if (cache) return cache;
   try { cache = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(file(), 'utf8')) }; }
   catch { cache = { ...DEFAULTS }; }
+  // Colossus 2.3 was retired and 2.2 UC is now reached through the UltraCode effort.
+  if (cache.model === 'colossus-2.3') cache.model = 'colossus-3';
+  if (cache.model === 'colossus-2.2-uc') { cache.model = 'colossus-3'; cache.effort = 'ultracode'; }
+  if (cache.lastManualModel && !['colossus-2', 'colossus-3'].includes(cache.lastManualModel)) cache.lastManualModel = 'colossus-3';
+  if (Array.isArray(cache.enabledModels)) cache.enabledModels = cache.enabledModels.filter((id) => ['colossus-2', 'colossus-3'].includes(id));
+  if (Array.isArray(cache.enabledModels) && !cache.enabledModels.length) cache.enabledModels = null;
+  for (const a of cache.automations || []) if (a.model === 'colossus-2.3' || a.model === 'colossus-2.2-uc') a.model = 'colossus-3';
   return cache;
 }
 

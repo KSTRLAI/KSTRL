@@ -39,7 +39,7 @@ export function DiffModal({ diff, onClose, onOpenFile }) {
 }
 
 export function Welcome({ info, settings, onOpenFolder, onOpenRecent, onNewChat, onTerminal, onPalette }) {
-  const models = info?.models || [];
+  const models = (info?.models || []).filter((m) => !m.hidden);
   return (
     <div className="welcome">
       <div className="welcome-inner">

@@ -21,15 +21,15 @@ monaco.editor.defineTheme('kstrl-dark', {
   inherit: true,
   rules: [
     { token: 'comment', foreground: '6b6b74', fontStyle: 'italic' },
-    { token: 'keyword', foreground: 'ff6b6b' },
+    { token: 'keyword', foreground: 'c4a7ff' },
     { token: 'string', foreground: 'f2c879' },
-    { token: 'number', foreground: 'ffa07a' },
+    { token: 'number', foreground: 'f5b971' },
     { token: 'type', foreground: '7fd3ff' },
     { token: 'type.identifier', foreground: '7fd3ff' },
     { token: 'function', foreground: 'ffffff' },
     { token: 'variable', foreground: 'e6e6e6' },
     { token: 'delimiter', foreground: 'a0a0a8' },
-    { token: 'tag', foreground: 'ff6b6b' },
+    { token: 'tag', foreground: '82aaff' },
     { token: 'attribute.name', foreground: 'f2c879' },
   ],
   colors: {
@@ -50,7 +50,7 @@ monaco.editor.defineTheme('kstrl-dark', {
     'scrollbarSlider.hoverBackground': '#ffffff24',
     'minimap.background': '#111113',
     'diffEditor.insertedTextBackground': '#2ea04333',
-    'diffEditor.removedTextBackground': '#ff3d3d33',
+    'diffEditor.removedTextBackground': '#f5b45a2e',
   },
 });
 

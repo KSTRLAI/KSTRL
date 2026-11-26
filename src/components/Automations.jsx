@@ -79,7 +79,7 @@ function Editor({ initial, info, settings, onSave, onCancel }) {
         <label><span className="label">Model</span>
           <select className="input" value={a.model} onChange={(e) => up({ model: e.target.value })}>
             <option value="auto">Auto</option>
-            {(info?.models || []).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {(info?.models || []).filter((m) => !m.hidden).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </label>
       </div>
@@ -97,7 +97,10 @@ export default function AutomationsPage({ info, settings, workspace, onChange, o
   const [editing, setEditing] = useState(null);
   const save = (a) => {
     const exists = list.some((x) => x.id === a.id);
-    onChange({ automations: exists ? list.map((x) => (x.id === a.id ? a : x)) : [...list, a] });
+    const prev = list.find((x) => x.id === a.id);
+    // Start counting from now so a schedule never fires the moment it's saved.
+    const fresh = !exists || JSON.stringify(prev.schedule) !== JSON.stringify(a.schedule) ? { ...a, lastRun: Date.now() } : a;
+    onChange({ automations: exists ? list.map((x) => (x.id === a.id ? fresh : x)) : [...list, fresh] });
     setEditing(null);
   };
   const blank = () => ({ id: 'auto-' + Date.now().toString(36), name: '', prompt: '', project: workspace?.root || null, schedule: { type: 'daily', time: '09:00' }, mode: 'agent', model: 'auto', enabled: true, lastRun: 0 });
@@ -132,11 +135,11 @@ export default function AutomationsPage({ info, settings, workspace, onChange, o
                   <span><Clock size={11} /> {describeSchedule(a)}</span>
                   <span><Folder size={11} /> {base(a.project)}</span>
                   <span>{a.mode === 'ask' ? 'Ask' : 'Agent'} · {a.model === 'auto' ? 'Auto' : (info?.models || []).find((m) => m.id === a.model)?.name}</span>
-                  {a.lastRun ? <span>Last run {new Date(a.lastRun).toLocaleString()}</span> : null}
+                  {a.ran && a.lastRun ? <span>Last run {new Date(a.lastRun).toLocaleString()}</span> : null}
                 </div>
               </div>
               <div className="auto-actions">
-                <button className={'toggle' + (a.enabled ? ' on' : '')} title={a.enabled ? 'Enabled' : 'Paused'} onClick={() => onChange({ automations: list.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x)) })} />
+                <button className={'toggle' + (a.enabled ? ' on' : '')} title={a.enabled ? 'Enabled' : 'Paused'} onClick={() => onChange({ automations: list.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled, ...(!x.enabled ? { lastRun: Date.now() } : {}) } : x)) })} />
                 <button className="icon-btn" title="Run now" onClick={() => onRun(a, 'manual')}><Play size={14} /></button>
                 <button className="icon-btn" title="Edit" onClick={() => setEditing(a)}><Pencil size={13} /></button>
                 <button className="icon-btn" title="Delete" onClick={() => { if (confirm(`Delete “${a.name}”?`)) onChange({ automations: list.filter((x) => x.id !== a.id) }); }}><Trash2 size={13} /></button>

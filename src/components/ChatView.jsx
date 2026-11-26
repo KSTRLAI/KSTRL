@@ -3,14 +3,14 @@ import {
   ArrowUp, Square, Plus, X, ChevronDown, Check, Brain, FileCode2, Terminal as TermIcon, Search, FolderTree, FilePen,
   FilePlus2, Loader2, CircleAlert, CircleCheck, CircleX, Infinity as InfinityIcon, MessageCircleQuestion, AtSign, Zap,
   Gauge, Flame, Rocket, RotateCcw, Eye, History, PanelRightClose, Copy, Monitor, FolderPlus, FolderOpen, Folder,
-  Hammer, ListChecks, Bug, Compass, Lock,
+  Hammer, ListChecks, Bug, Compass, Code2,
 } from 'lucide-react';
 import { renderMarkdown } from '../lib/markdown.js';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { ModelMenu, resolveModel, modelLabel } from './ModelPicker.jsx';
 
 const api = window.kstrl;
-const EFFORT_ICON = { flash: Zap, normal: Gauge, high: Flame, max: Rocket };
+const EFFORT_ICON = { flash: Zap, normal: Gauge, high: Flame, max: Rocket, ultracode: Code2 };
 const TOOL_ICON = { list_files: FolderTree, read_file: FileCode2, search: Search, write_file: FilePlus2, edit_file: FilePen, run_command: TermIcon };
 const TOOL_VERB = { list_files: 'List', read_file: 'Read', search: 'Search', write_file: 'Write', edit_file: 'Edit', run_command: 'Run' };
 
@@ -290,7 +290,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
           {mode === 'agent' ? <InfinityIcon size={13} color="var(--accent)" /> : <MessageCircleQuestion size={13} />}
           {mode === 'agent' ? 'Agent' : 'Ask'} <ChevronDown size={11} />
         </button>
-        <button className="chip-btn" title="Effort" onClick={openAt('effort')}><EffortIcon size={12} /> {effort?.name} <ChevronDown size={11} /></button>
+        <button className="chip-btn" title="Effort" onClick={openAt('effort')}><EffortIcon size={12} /> <span className="lbl">{effort?.name}</span> <ChevronDown size={11} /></button>
         <span className="spacer" />
         <button className="chip-btn" title="Model" onClick={openAt('model')}>
           <span className="mname">{label}</span>
@@ -442,7 +442,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         ) : (
           <div className="msg" key={i}>
             <div className="msg-role kestrel">
-              <img src="./logo.png" alt="" /> Kestrel <span style={{ color: 'var(--text-3)', letterSpacing: '.08em' }}>· {it.model}{it.mode === 'ask' ? ' · ask' : ''}</span>
+              <img src="./logo.png" alt="" /> Kestrel <span className="sub">· {it.model}{it.mode === 'ask' ? ' · ask' : ''}</span>
               {it.running && <span className="pulse" />}
             </div>
             {it.blocks.length === 0 && it.running && <div className="notice">Thinking…</div>}

@@ -11,7 +11,7 @@ function Ring({ value, total }) {
     <svg width="18" height="18" viewBox="0 0 18 18" style={{ transform: 'rotate(-90deg)' }}>
       <circle cx="9" cy="9" r={r} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="2" />
       <circle cx="9" cy="9" r={r} fill="none" stroke="url(#ringg)" strokeWidth="2" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - value / total)} />
-      <defs><linearGradient id="ringg" x1="0" x2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#ff3d3d" /></linearGradient></defs>
+      <defs><linearGradient id="ringg" x1="0" x2="1"><stop offset="0" stopColor="#86efac" /><stop offset="1" stopColor="#4ade80" /></linearGradient></defs>
     </svg>
   );
 }
@@ -82,7 +82,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
             <div key={p.root}>
               <div className={'hs-project' + (isOpen ? ' open' : '')} title={p.root} onClick={() => (isOpen ? setCollapsed((c) => ({ ...c, [p.root]: !coll })) : onOpenRecent(p.root))}>
                 <span className="chev" onClick={(e) => { e.stopPropagation(); setCollapsed((c) => ({ ...c, [p.root]: !coll })); }}>{p.chats.length ? (coll ? <ChevronRight size={12} /> : <ChevronDown size={12} />) : null}</span>
-                {isOpen ? <FolderOpen size={14} color="#ff8a8a" /> : <Folder size={14} />}
+                {isOpen ? <FolderOpen size={14} /> : <Folder size={14} />}
                 <span className="name">{base(p.root)}</span>
                 {isOpen && <Check size={12} color="var(--accent)" />}
               </div>

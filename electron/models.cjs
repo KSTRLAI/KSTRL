@@ -13,17 +13,10 @@ const MODELS = [
     id: 'colossus-2.2-uc',
     name: 'Colossus 2.2 UC',
     tag: 'Ultracode',
-    description: 'Tuned for heavy coding: refactors, multi-file changes, debugging.',
+    description: 'Tuned for heavy coding: refactors, multi-file changes, debugging. Used when effort is set to UltraCode.',
     backend: 'claude-sonnet-5-5',
     fallback: true,
-  },
-  {
-    id: 'colossus-2.3',
-    name: 'Colossus 2.3',
-    tag: 'Reasoning',
-    description: 'Deep reasoning for architecture, hard bugs and long agent runs.',
-    backend: 'claude-opus-5-5',
-    fallback: true,
+    hidden: true, // not in the model picker — activated by the UltraCode effort level
   },
   {
     id: 'colossus-3',
@@ -41,6 +34,7 @@ const EFFORTS = [
   { id: 'normal', name: 'Normal', api: 'medium', description: 'Balanced speed and depth' },
   { id: 'high', name: 'High', api: 'high', description: 'Takes its time on multi-step work' },
   { id: 'max', name: 'Max', api: 'max', description: 'Full effort for the hardest problems' },
+  { id: 'ultracode', name: 'UltraCode', api: 'high', model: 'colossus-2.2-uc', description: 'Switches to Colossus 2.2 UC, tuned for heavy coding' },
 ];
 
 module.exports = { MODELS, EFFORTS };

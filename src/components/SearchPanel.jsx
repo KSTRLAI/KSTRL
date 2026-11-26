@@ -54,7 +54,7 @@ export default function SearchPanel({ workspace, onOpenAt, focusKey }) {
           </div>
         </div>
         <input className="input" placeholder="Files to include (e.g. *.ts)" value={glob} onChange={(e) => setGlob(e.target.value)} />
-        <div style={{ fontSize: 11.5, color: err ? '#ffb4b4' : 'var(--text-3)' }}>
+        <div style={{ fontSize: 11.5, color: err ? 'var(--warn)' : 'var(--text-3)' }}>
           {err || (!workspace ? 'Open a folder to search.' : busy ? 'Searching…' : q ? `${results.length}${results.length >= 1000 ? '+' : ''} results in ${grouped.length} files` : '')}
         </div>
       </div>
