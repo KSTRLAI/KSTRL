@@ -416,6 +416,8 @@ export default function App() {
                 onChats={() => setHomePage('chat')}
                 update={update}
                 onUpdate={() => (update?.status === 'available' ? api.update.download() : api.update.install())}
+                onShortcuts={() => setSettingsOpen('keys')}
+                onToast={toast}
               />
               <div className={'resizer' + (dragHome ? ' dragging' : '')} onMouseDown={startHome} />
             </>

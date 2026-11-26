@@ -5,6 +5,7 @@
 | Model | Best for |
 | --- | --- |
 | **Colossus 2** | Quick edits, explanations, everyday questions |
+| **Colossus 2.1** | Balanced speed and quality for everyday coding |
 | **Colossus 3** (Flagship) | Maximum capability for the hardest work |
 | **Colossus 2.2 UC** | Heavy coding. It isn't in the model picker; it's used when you set the effort to **UltraCode** |
 
@@ -13,7 +14,7 @@ Effort levels: **Flash · Normal · High · Max · UltraCode**.
 ## Features
 
 - **Agents home**: a chat-first start screen with projects, chat history, Getting Started, and a centered composer. Switch to the full editor with **IDE ↗** (`Ctrl+E`).
-- **Model picker** with search, **Auto** (KSTRL picks the right Colossus model for each request) and **MAX Mode** (full effort).
+- **Model picker**: Colossus 3, 2.1 and 2, with number-key shortcuts. **Effort** and **More models** (Auto, Colossus 2.2 UC) are submenus.
 - **Automations**: saved prompts that Kestrel runs on demand, at startup, hourly, daily or on weekdays while KSTRL is open.
 - **Settings** (`Ctrl+,`) is a full page with search. Tabs: General, Appearance, Plan & Usage, Agents, Models, Keyboard Shortcuts and About.
 - **Kestrel Agent panel** (`Ctrl+I`). Use **Agent** mode to read, write and edit files and run commands, or **Ask** mode for read-only answers. Kestrel streams its thought process and shows every tool call as a card.

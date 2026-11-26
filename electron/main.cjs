@@ -43,11 +43,11 @@ function createWindow() {
     minWidth: 900,
     minHeight: 560,
     title: 'KSTRL',
-    backgroundColor: '#0d0d0f',
+    backgroundColor: '#0e0e0e',
     icon: path.join(__dirname, '..', isDev ? 'public' : 'dist', 'icon.png'),
     show: false,
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0d0d0f', symbolColor: '#e5e5e5', height: 38 },
+    titleBarOverlay: { color: '#0e0e0e', symbolColor: '#e5e5e5', height: 38 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

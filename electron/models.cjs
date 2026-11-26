@@ -10,6 +10,14 @@ const MODELS = [
     fallback: false,
   },
   {
+    id: 'colossus-2.1',
+    name: 'Colossus 2.1',
+    tag: 'Balanced',
+    description: 'Balanced speed and quality for everyday coding.',
+    backend: 'claude-sonnet-5-5',
+    fallback: true,
+  },
+  {
     id: 'colossus-2.2-uc',
     name: 'Colossus 2.2 UC',
     tag: 'Ultracode',

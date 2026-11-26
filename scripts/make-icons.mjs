@@ -9,9 +9,9 @@ const tile = Buffer.from(`
 <svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}">
   <defs>
     <radialGradient id="g" cx="50%" cy="42%" r="70%">
-      <stop offset="0%" stop-color="#26262b"/>
+      <stop offset="0%" stop-color="#262626"/>
       <stop offset="60%" stop-color="#141416"/>
-      <stop offset="100%" stop-color="#0b0b0d"/>
+      <stop offset="100%" stop-color="#0c0c0c"/>
     </radialGradient>
   </defs>
   <rect x="24" y="24" width="${SIZE - 48}" height="${SIZE - 48}" rx="210" fill="url(#g)"/>

@@ -1,6 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
+import { Popover } from './ChatView.jsx';
+import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw } from 'lucide-react';
+
+const SITE = 'https://kstrlsi.base44.app/';
+const ISSUES = 'https://github.com/AmirFoodDelivery/KSTRL/issues/new';
 
 const base = (p) => (p ? p.split(/[\\/]/).pop() : '');
 
@@ -16,7 +21,8 @@ function Ring({ value, total }) {
   );
 }
 
-export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate }) {
+export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast }) {
+  const [acct, setAcct] = useState(null);
   const s = useChats();
   const current = activeChat(s);
   const [filter, setFilter] = useState(null);
@@ -107,11 +113,36 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
       )}
 
       <div className="hs-user">
-        <span className="avatar">{(settings.userName || 'K')[0].toUpperCase()}</span>
-        <span className="name">{settings.userName || 'You'}</span>
+        <button className="hs-acct" title="Account" onClick={(e) => setAcct(acct ? null : e.currentTarget)}>
+          <span className="avatar">{(settings.userName || 'K')[0].toUpperCase()}</span>
+          <span className="name">{settings.userName || 'You'}</span>
+        </button>
         {(update?.status === 'ready' || update?.status === 'available') && <button className="btn grad update-btn" title={`KSTRL ${update.version}`} onClick={onUpdate}><ArrowUpCircle size={13} /> Update</button>}
         <button className="icon-btn" title="Settings (Ctrl+,)" onClick={onSettings}><SettingsIcon size={15} /></button>
       </div>
+      {acct && (
+        <Popover anchor={acct} onClose={() => setAcct(null)} width={250}>
+          <div className="acct-menu">
+            {[
+              [SettingsIcon, 'Settings', 'Ctrl+,', onSettings],
+              '-',
+              [RefreshCw, 'Check for Updates', '', async () => { const u = await window.kstrl.update.check(); onToast?.(u?.status === 'unsupported' ? 'Updates work in the installed app' : 'Checking for updates…'); }],
+              [BookOpen, 'Docs', '', () => window.kstrl.shell.openExternal(SITE)],
+              [Keyboard, 'Shortcuts', '', onShortcuts],
+              [TriangleAlert, 'Report Issue', '', () => window.kstrl.shell.openExternal(ISSUES)],
+              [MessageCircle, 'Contact Us', '', () => window.kstrl.shell.openExternal(SITE)],
+              '-',
+              [LogOut, 'Quit KSTRL', '', () => window.close()],
+            ].map((it, i) => it === '-' ? <div key={i} className="acct-sep" /> : (
+              <button key={it[1]} className="acct-item" onClick={() => { setAcct(null); it[3](); }}>
+                {React.createElement(it[0], { size: 16 })}
+                <span>{it[1]}</span>
+                {it[2] && <span className="kbd">{it[2]}</span>}
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
     </aside>
   );
 }

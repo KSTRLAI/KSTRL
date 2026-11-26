@@ -15,5 +15,5 @@ export function languageFor(path) {
   const ext = base.includes('.') ? base.split('.').pop() : '';
   return MAP[ext] || 'plaintext';
 }
-const COLORS = { javascript: '#f1e05a', typescript: '#3178c6', json: '#cbcb41', markdown: '#7fd3ff', html: '#e8a85b', css: '#563d7c', scss: '#cf9fdc', python: '#3572a5', rust: '#dea584', go: '#00add8', java: '#b07219', csharp: '#178600', cpp: '#9b8cf0', c: '#a8b9cc', shell: '#89e051', powershell: '#5391fe', yaml: '#a0a0a8' };
-export const colorFor = (path) => COLORS[languageFor(path)] || '#8a8a93';
+const COLORS = { javascript: '#f1e05a', typescript: '#3178c6', json: '#cbcb41', markdown: '#7fd3ff', html: '#e8a85b', css: '#563d7c', scss: '#cf9fdc', python: '#3572a5', rust: '#dea584', go: '#00add8', java: '#b07219', csharp: '#178600', cpp: '#9b8cf0', c: '#a8b9cc', shell: '#89e051', powershell: '#5391fe', yaml: '#a3a3a3' };
+export const colorFor = (path) => COLORS[languageFor(path)] || '#8c8c8c';

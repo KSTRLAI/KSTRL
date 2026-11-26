@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, ChevronDown, FilePlus2, FolderPlus, RefreshCw, ChevronsDownUp, Folder, FolderOpen } from 'lucide-react';
 import { colorFor } from '../lib/lang.js';
 
@@ -95,7 +96,7 @@ export default function Explorer({ workspace, activePath, onOpenFile, onToast, o
   const editRow = (depth, mode, initial = '') => (
     <div className="tree-row" style={{ paddingLeft: 8 + depth * 12 }}>
       <span className="chev" />
-      {mode === 'new-dir' ? <Folder size={14} color="var(--text-3)" /> : <span className="dot" style={{ background: '#8a8a93' }} />}
+      {mode === 'new-dir' ? <Folder size={14} color="var(--text-3)" /> : <span className="dot" style={{ background: '#8c8c8c' }} />}
       <input
         autoFocus
         defaultValue={initial}
@@ -152,7 +153,7 @@ export default function Explorer({ workspace, activePath, onOpenFile, onToast, o
       <div className="tree" onContextMenu={(ev) => { if (ev.target === ev.currentTarget && workspace) { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, entry: { path: '.', dir: true, root: true } }); } }}>
         {workspace ? renderDir('.', 0) : <div style={{ padding: 14, color: 'var(--text-3)', fontSize: 12.5 }}>No folder opened.</div>}
       </div>
-      {menu && (
+      {menu && createPortal(
         <div className="dropdown ctx-menu glass-strong" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
           {menu.entry.dir && <button className="item" onClick={() => startNew('new-file', menu.entry.path)}>New File…</button>}
           {menu.entry.dir && <button className="item" onClick={() => startNew('new-dir', menu.entry.path)}>New Folder…</button>}
@@ -164,7 +165,8 @@ export default function Explorer({ workspace, activePath, onOpenFile, onToast, o
           {!menu.entry.root && <div className="sep" />}
           {!menu.entry.root && <button className="item" onClick={() => { setEditing({ mode: 'rename', entry: menu.entry }); setMenu(null); }}>Rename… <span className="kbd">F2</span></button>}
           {!menu.entry.root && <button className="item" onClick={() => remove(menu.entry)}>Delete</button>}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

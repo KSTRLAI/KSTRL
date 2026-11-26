@@ -5,6 +5,7 @@ import {
   Gauge, Flame, Rocket, RotateCcw, Eye, History, PanelRightClose, Copy, Monitor, FolderPlus, FolderOpen, Folder,
   Hammer, ListChecks, Bug, Compass, Code2,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { renderMarkdown } from '../lib/markdown.js';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { ModelMenu, resolveModel, modelLabel } from './ModelPicker.jsx';
@@ -118,17 +119,24 @@ function ChangesCard({ item, onOpenDiff, onRevert }) {
   );
 }
 
-export function Popover({ anchor, onClose, children, width = 300, below = false }) {
+export function Popover({ anchor, onClose, children, width = 300, below = false, align = 'left' }) {
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
   useLayoutEffect(() => {
     if (!anchor) return;
-    const r = anchor.getBoundingClientRect();
-    const h = ref.current?.offsetHeight || 200;
-    const left = Math.min(Math.max(8, r.left), window.innerWidth - width - 8);
-    const top = below || r.top - h - 6 < 8 ? Math.min(r.bottom + 6, window.innerHeight - h - 8) : r.top - h - 6;
-    setPos({ left, top });
-  }, [anchor, width, below]);
+    const place = () => {
+      const r = anchor.getBoundingClientRect();
+      const h = ref.current?.offsetHeight || 200;
+      const left = Math.min(Math.max(8, align === 'right' ? r.right - width : r.left), window.innerWidth - width - 8);
+      let top = below || r.top - h - 6 < 8 ? r.bottom + 6 : r.top - h - 6;
+      top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+      setPos((p) => (p && p.left === left && p.top === top ? p : { left, top }));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    if (ref.current) ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [anchor, width, below, align]);
   useEffect(() => {
     const close = (e) => { if (!ref.current?.contains(e.target) && !anchor?.contains(e.target)) onClose(); };
     const esc = (e) => e.key === 'Escape' && onClose();
@@ -136,7 +144,8 @@ export function Popover({ anchor, onClose, children, width = 300, below = false 
     window.addEventListener('keydown', esc);
     return () => { window.removeEventListener('mousedown', close); window.removeEventListener('keydown', esc); };
   }, [anchor, onClose]);
-  return <div ref={ref} className="popover glass-strong" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}>{children}</div>;
+  // Portal to <body>: glass panes use backdrop-filter, which would otherwise become the containing block for position:fixed.
+  return createPortal(<div ref={ref} className="popover glass-strong" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}>{children}</div>, document.body);
 }
 
 const TIPS = [
@@ -285,18 +294,13 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         onKeyDown={onKeyDown}
       />
       <div className="row">
-        <button className="round-btn glass-soft" title="Add context" onClick={openAt('add')}><Plus size={15} /></button>
+        <button className="plus-btn" title="Add context" onClick={openAt('add')}><Plus size={17} /></button>
         <button className="chip-btn on" title="Switch mode (Ctrl+.)" onClick={openAt('mode')}>
           {mode === 'agent' ? <InfinityIcon size={13} color="var(--accent)" /> : <MessageCircleQuestion size={13} />}
           {mode === 'agent' ? 'Agent' : 'Ask'} <ChevronDown size={11} />
         </button>
-        <button className="chip-btn" title="Effort" onClick={openAt('effort')}><EffortIcon size={12} /> <span className="lbl">{effort?.name}</span> <ChevronDown size={11} /></button>
         <span className="spacer" />
-        <button className="chip-btn" title="Model" onClick={openAt('model')}>
-          <span className="mname">{label}</span>
-          {settings.effort === 'max' && <span className="max-badge">MAX</span>}
-          <ChevronDown size={11} />
-        </button>
+        <button className="model-btn" title={`Model · effort ${effort?.name || ''}`} onClick={openAt('model')}>{label}</button>
         {chat.running ? (
           <button className="send grad stop" title="Stop (Esc)" onClick={() => store.stop(chat.id)}><Square size={11} fill="currentColor" /></button>
         ) : (
@@ -309,7 +313,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
   const popovers = (
     <>
       {pop?.kind === 'model' && (
-        <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={300} below={hero}>
+        <Popover anchor={pop.anchor} onClose={() => setPop(null)} width={320} below={hero} align="right">
           <ModelMenu info={info} settings={settings} onSettings={onSettings} onClose={() => setPop(null)} onManage={() => props.onManageModels?.()} />
         </Popover>
       )}
