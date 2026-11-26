@@ -298,7 +298,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
               <img src="./icon.png" alt="" />
               <div className="mono" style={{ letterSpacing: '.4em', fontSize: 18, paddingLeft: '.4em' }}>KSTRL</div>
               <div className="set-note">Version {info?.version} · {info?.platform === 'win32' ? 'Windows' : info?.platform}</div>
-              <p className="mono">An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by Colossus 2, 2.2 UC, 2.3 and the flagship Colossus 3.</p>
+              <p>An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by Colossus 2, the flagship Colossus 3, and Colossus 2.2 UC for UltraCode.</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 <UpdateControl />
                 <button className="btn" onClick={() => api.shell.openExternal(SITE)}>kstrlsi <ExternalLink size={12} /></button>
