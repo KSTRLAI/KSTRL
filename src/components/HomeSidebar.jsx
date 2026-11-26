@@ -6,7 +6,7 @@ import Avatar from './Avatar.jsx';
 import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw, KeyRound } from 'lucide-react';
 
 const SITE = 'https://kstrlsi.base44.app/';
-const ISSUES = 'https://github.com/AmirFoodDelivery/KSTRL/issues/new';
+const ISSUES = 'https://github.com/KSTRLAI/KSTRL/issues/new';
 
 const base = (p) => (p ? p.split(/[\\/]/).pop() : '');
 

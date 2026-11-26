@@ -89,4 +89,4 @@ build/      icons + logo used for packaging
 ```
 
 The installer always has the same name, so this link always downloads the newest version (handy for the website):
-https://github.com/AmirFoodDelivery/KSTRL/releases/latest/download/KSTRL-Setup.exe
+https://github.com/KSTRLAI/KSTRL/releases/latest/download/KSTRL-Setup.exe

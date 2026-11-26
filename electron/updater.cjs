@@ -1,4 +1,4 @@
-// Auto-update from GitHub Releases (AmirFoodDelivery/KSTRL).
+// Auto-update from GitHub Releases (KSTRLAI/KSTRL).
 // Works for the installed (NSIS) build; the portable .exe can't replace itself.
 const { app } = require('electron');
 
