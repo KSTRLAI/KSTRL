@@ -594,7 +594,7 @@ export default function App() {
           <img src="./logo.png" alt="" />
           <div style={{ flex: 1 }}>
             <div className="t">KSTRL {update.version} is ready</div>
-            <div className="d">Restart to finish updating. Your chats in progress will be closed.</div>
+            <div className="d">KSTRL updates in the background and reopens in a few seconds. Chats in progress will be closed.</div>
           </div>
           <button className="btn ghost" onClick={() => setUpdateDismissed(update.version)}>Later</button>
           <button className="btn grad" onClick={() => api.update.install()}>Restart</button>

@@ -47,8 +47,10 @@ function check() {
   return state;
 }
 
+// Silent install (no setup wizard), then KSTRL reopens by itself — it feels like a restart.
+// Only the changed parts of the app are downloaded (differential update via the .blockmap).
 function install() {
-  if (autoUpdater && state.status === 'ready') setImmediate(() => autoUpdater.quitAndInstall(false, true));
+  if (autoUpdater && state.status === 'ready') setImmediate(() => autoUpdater.quitAndInstall(true, true));
 }
 
 module.exports = { init, check, install, setAuto, download, getState: () => ({ ...state, current: app.getVersion() }) };
