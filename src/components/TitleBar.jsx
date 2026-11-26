@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
 
-export default function TitleBar({ menus, workspace, onOmni }) {
+export default function TitleBar({ menus }) {
   const [open, setOpen] = useState(null); // { index, x, y }
   const ref = useRef(null);
 
@@ -33,11 +32,7 @@ export default function TitleBar({ menus, workspace, onOmni }) {
           {m.label}
         </button>
       ))}
-      <div className="center">
-        <button className="omni" onClick={onOmni}>
-          <Search size={12} /> {workspace ? workspace.name : 'KSTRL'} <span style={{ opacity: 0.6 }}>· Ctrl+P</span>
-        </button>
-      </div>
+      <div className="center" />
       {open && (
         <div className="dropdown glass-strong" style={{ left: open.x, top: open.y }} onMouseDown={(e) => e.stopPropagation()}>
           {menus[open.index].items.map((it, j) =>

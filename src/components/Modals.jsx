@@ -1,24 +1,115 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, KeyRound, CircleCheck, FolderOpen, MessageSquarePlus, TerminalSquare, Command, ExternalLink, Check } from 'lucide-react';
+import { X, KeyRound, CircleCheck, FolderOpen, MessageSquarePlus, TerminalSquare, Command, ExternalLink, Check, Server, Cloud, PlugZap, Loader2 } from 'lucide-react';
 import { monaco } from '../lib/monaco.js';
 import { languageFor } from '../lib/lang.js';
 
 const api = window.kstrl;
 const SITE = 'https://kstrlsi.base44.app/';
 
-export function SettingsModal({ info, settings, onChange, onClose, initialTab = 'general' }) {
-  const [tab, setTab] = useState(initialTab);
-  const [key, setKey] = useState('');
-  const [saved, setSaved] = useState(false);
+function ServerTab({ info, settings, onChange }) {
   const models = info?.models || [];
+  const provider = settings.provider === 'anthropic' ? 'anthropic' : 'unsloth';
+  const [url, setUrl] = useState(settings.unslothURL || '');
+  const [key, setKey] = useState('');
+  const [akey, setAkey] = useState('');
+  const [test, setTest] = useState(null); // { busy } | { ok, models, url } | { ok:false, error }
 
-  const saveKey = async () => {
-    await onChange({ apiKey: key });
+  const runTest = async () => {
+    setTest({ busy: true });
+    await onChange({ unslothURL: url.trim(), ...(key ? { unslothKey: key } : {}) });
     setKey('');
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTest(await api.server.test({}));
   };
 
+  useEffect(() => { if (provider === 'unsloth' && settings.unslothURL) api.server.test({}).then(setTest); }, []); // eslint-disable-line
+
+  const serverModels = test?.ok ? test.models : [];
+
+  return (
+    <>
+      <div className="seg glass-soft">
+        <button className={provider === 'unsloth' ? 'on grad' : ''} onClick={() => onChange({ provider: 'unsloth' })}><Server size={14} /> Unsloth server</button>
+        <button className={provider === 'anthropic' ? 'on grad' : ''} onClick={() => onChange({ provider: 'anthropic' })}><Cloud size={14} /> Anthropic API</button>
+      </div>
+
+      {provider === 'unsloth' ? (
+        <>
+          <div className="field">
+            <div className="label" style={{ marginBottom: 8 }}>Server URL</div>
+            <input className="input mono" placeholder="http://192.168.1.50:8000" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => url.trim() !== (settings.unslothURL || '') && onChange({ unslothURL: url.trim() })} onKeyDown={(e) => e.key === 'Enter' && runTest()} />
+            <div className="hint">The address of your Unsloth server. KSTRL talks to its OpenAI-compatible API (<span className="mono">/v1/chat/completions</span>); "/v1" is added automatically.</div>
+          </div>
+          <div className="field">
+            <div className="label" style={{ marginBottom: 8 }}>API key <span style={{ textTransform: 'none', letterSpacing: 0, color: 'var(--text-3)' }}>(optional)</span></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="input" type="password" placeholder={settings.hasUnslothKey ? '•••••••••••• (saved — paste to replace)' : 'Only if your server requires one'} value={key} onChange={(e) => setKey(e.target.value)} />
+              {settings.hasUnslothKey && <button className="btn" onClick={() => onChange({ unslothKey: '' })}>Remove</button>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+            <button className="btn grad" disabled={!url.trim() || test?.busy} onClick={runTest}>{test?.busy ? <Loader2 size={13} className="spin" /> : <PlugZap size={13} />} Test connection</button>
+            {test && !test.busy && (test.ok
+              ? <span className="status-ok"><CircleCheck size={13} /> Connected · {test.models.length} model{test.models.length === 1 ? '' : 's'} available</span>
+              : <span style={{ color: '#ffb4b4', fontSize: 12 }}>{test.error}</span>)}
+          </div>
+          <div className="label" style={{ marginBottom: 8 }}>Colossus models → server models</div>
+          <div className="hint" style={{ marginTop: 0, marginBottom: 10 }}>Choose which model on your server powers each Colossus model. "Server default" uses the first model the server lists.</div>
+          {models.map((m) => (
+            <div key={m.id} className="model-row glass-soft">
+              <div>
+                <div className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{m.name}</div>
+                <div className="label" style={{ fontSize: 9, color: 'var(--accent)', marginTop: 3 }}>{m.tag}</div>
+              </div>
+              {serverModels.length ? (
+                <select className="input mono" style={{ fontSize: 12 }} value={settings.unslothModels?.[m.id] || ''} onChange={(e) => onChange({ unslothModels: { ...settings.unslothModels, [m.id]: e.target.value || undefined } })}>
+                  <option value="">Server default{serverModels[0] ? ` (${serverModels[0]})` : ''}</option>
+                  {serverModels.map((x) => <option key={x} value={x}>{x}</option>)}
+                  {settings.unslothModels?.[m.id] && !serverModels.includes(settings.unslothModels[m.id]) && <option value={settings.unslothModels[m.id]}>{settings.unslothModels[m.id]}</option>}
+                </select>
+              ) : (
+                <input className="input mono" style={{ fontSize: 12 }} placeholder="Server default — or type a model id" defaultValue={settings.unslothModels?.[m.id] || ''} onBlur={(e) => onChange({ unslothModels: { ...settings.unslothModels, [m.id]: e.target.value.trim() || undefined } })} />
+              )}
+            </div>
+          ))}
+        </>
+      ) : (
+        <>
+          <div className="field">
+            <div className="label" style={{ marginBottom: 8 }}>Anthropic API key</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="input" type="password" placeholder={settings.hasApiKey ? '•••••••••••• (saved — paste to replace)' : 'Paste your API key'} value={akey} onChange={(e) => setAkey(e.target.value)} />
+              <button className="btn grad" disabled={!akey} onClick={async () => { await onChange({ apiKey: akey }); setAkey(''); }}><KeyRound size={13} /> Save</button>
+              {settings.hasApiKey && <button className="btn" onClick={() => onChange({ apiKey: '' })}>Remove</button>}
+            </div>
+            <div className="hint">{settings.hasApiKey ? <span className="status-ok"><CircleCheck size={13} /> A key is configured</span> : 'Encrypted with Windows secure storage.'}</div>
+          </div>
+          <div className="field">
+            <div className="label" style={{ marginBottom: 8 }}>Custom endpoint (optional)</div>
+            <input className="input" placeholder="https://api.anthropic.com" defaultValue={settings.baseURL} onBlur={(e) => onChange({ baseURL: e.target.value.trim() })} />
+          </div>
+          <div className="label" style={{ marginBottom: 8 }}>Colossus models → backend models</div>
+          {models.map((m) => (
+            <div key={m.id} className="model-row glass-soft">
+              <div>
+                <div className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{m.name}</div>
+                <div className="label" style={{ fontSize: 9, color: 'var(--accent)', marginTop: 3 }}>{m.tag}</div>
+              </div>
+              <input className="input mono" style={{ fontSize: 12 }} placeholder={m.backend} defaultValue={settings.backendOverrides?.[m.id] || ''} onBlur={(e) => onChange({ backendOverrides: { ...settings.backendOverrides, [m.id]: e.target.value.trim() || undefined } })} />
+            </div>
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+export function SettingsModal({ info, settings, onChange, onClose, initialTab = 'general' }) {
+  const [tab, setTab] = useState(initialTab === 'models' ? 'server' : initialTab);
+  useEffect(() => {
+    const esc = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [onClose]);
   return (
     <div className="overlay center" onMouseDown={onClose}>
       <div className="modal glass-strong" onMouseDown={(e) => e.stopPropagation()}>
@@ -27,30 +118,14 @@ export function SettingsModal({ info, settings, onChange, onClose, initialTab = 
           <button className="icon-btn" onClick={onClose}><X size={16} /></button>
         </div>
         <div className="modal-tabs">
-          {[['general', 'General'], ['models', 'Models'], ['kestrel', 'Kestrel'], ['about', 'About']].map(([id, label]) => (
+          {[['server', 'Model Server'], ['general', 'General'], ['kestrel', 'Rules'], ['about', 'About']].map(([id, label]) => (
             <button key={id} className={'panel-tab' + (tab === id ? ' active' : '')} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
         <div className="modal-body">
+          {tab === 'server' && <ServerTab info={info} settings={settings} onChange={onChange} />}
           {tab === 'general' && (
             <>
-              <div className="field">
-                <div className="label" style={{ marginBottom: 8 }}>API key</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input className="input" type="password" placeholder={settings.hasApiKey ? '•••••••••••••••• (saved — paste to replace)' : 'Paste your API key'} value={key} onChange={(e) => setKey(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && key && saveKey()} />
-                  <button className="btn primary" disabled={!key} onClick={saveKey}><KeyRound size={13} /> Save</button>
-                </div>
-                <div className="hint">
-                  {saved ? <span className="status-ok"><CircleCheck size={13} /> Key saved</span> : settings.hasApiKey ? <span className="status-ok"><CircleCheck size={13} /> A key is configured</span> : 'Required to use the Colossus models.'}
-                  {' '}The Colossus models run on the Anthropic API — use an Anthropic API key. It is encrypted with Windows' secure storage and never leaves this machine except to call the model service.
-                  {settings.hasApiKey && <> <button className="btn ghost" style={{ height: 20, padding: '0 6px', fontSize: 11 }} onClick={() => onChange({ apiKey: '' })}>Remove key</button></>}
-                </div>
-              </div>
-              <div className="field">
-                <div className="label" style={{ marginBottom: 8 }}>Custom endpoint (optional)</div>
-                <input className="input" placeholder="https://api.anthropic.com" defaultValue={settings.baseURL} onBlur={(e) => onChange({ baseURL: e.target.value.trim() })} />
-                <div className="hint">Route requests through a gateway or proxy that speaks the Anthropic Messages API. Leave empty for the default.</div>
-              </div>
               <div className="toggle-row glass-soft">
                 <div>
                   <div className="label" style={{ color: 'var(--text)' }}>Auto-run commands</div>
@@ -71,28 +146,6 @@ export function SettingsModal({ info, settings, onChange, onClose, initialTab = 
               </div>
             </>
           )}
-          {tab === 'models' && (
-            <>
-              <div className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
-                Each Colossus model is served by a backend model on the Anthropic API. Advanced: override the backend model ID per Colossus model. Leave a field empty to use the default.
-              </div>
-              {models.map((m) => (
-                <div key={m.id} className="model-row glass-soft">
-                  <div>
-                    <div className="mono" style={{ fontWeight: 600, fontSize: 12.5 }}>{m.name}</div>
-                    <div className="label" style={{ fontSize: 9, color: 'var(--accent)', marginTop: 3 }}>{m.tag}</div>
-                  </div>
-                  <input
-                    className="input mono"
-                    style={{ fontSize: 12 }}
-                    placeholder={m.backend}
-                    defaultValue={settings.backendOverrides?.[m.id] || ''}
-                    onBlur={(e) => onChange({ backendOverrides: { ...settings.backendOverrides, [m.id]: e.target.value.trim() || undefined } })}
-                  />
-                </div>
-              ))}
-            </>
-          )}
           {tab === 'kestrel' && (
             <div className="field">
               <div className="label" style={{ marginBottom: 8 }}>Rules for Kestrel</div>
@@ -109,12 +162,8 @@ export function SettingsModal({ info, settings, onChange, onClose, initialTab = 
                 An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by Colossus 2, 2.2 UC, 2.3 and the flagship Colossus 3.
               </p>
               <div className="gold-glass" style={{ borderRadius: 20, padding: 18, width: '100%', maxWidth: 440, textAlign: 'left' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div>
-                    <div className="mono" style={{ fontWeight: 600, letterSpacing: '.2em', fontSize: 13 }}>KSTRL MAX</div>
-                    <div className="mono" style={{ fontSize: 11, opacity: 0.75, marginTop: 4 }}>Everything Kestrel can do, at full effort.</div>
-                  </div>
-                </div>
+                <div className="mono" style={{ fontWeight: 600, letterSpacing: '.2em', fontSize: 13 }}>KSTRL MAX</div>
+                <div className="mono" style={{ fontSize: 11, opacity: 0.75, marginTop: 4 }}>Everything Kestrel can do, at full effort.</div>
                 <ul className="mono" style={{ fontSize: 11, padding: 0, listStyle: 'none', margin: '12px 0 0' }}>
                   {['Max effort on every model', 'Colossus 3 flagship access', 'Early access to new models'].map((t) => <li key={t} style={{ display: 'flex', gap: 6, alignItems: 'center', margin: '4px 0' }}><Check size={12} /> {t}</li>)}
                 </ul>

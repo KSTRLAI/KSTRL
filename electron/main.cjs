@@ -90,8 +90,8 @@ handle('app:info', () => ({ version: app.getVersion(), platform: process.platfor
 handle('settings:get', () => settings.publicView());
 handle('settings:update', (patch) => settings.update(patch));
 
-handle('workspace:pick', async () => {
-  const r = await dialog.showOpenDialog(win, { title: 'Open Folder', properties: ['openDirectory', 'createDirectory'] });
+handle('workspace:pick', async (opts) => {
+  const r = await dialog.showOpenDialog(win, { title: opts?.title || 'Open Folder', buttonLabel: opts?.button, properties: ['openDirectory', 'createDirectory', 'promptToCreate'] });
   if (r.canceled || !r.filePaths[0]) return null;
   return openWorkspace(r.filePaths[0]);
 });
@@ -116,6 +116,10 @@ handle('agent:reset', (chatId) => agent.reset(chatId));
 handle('agent:approve', (id, ok) => agent.resolveApproval(id, ok));
 handle('agent:revert', (runId) => agent.revert(runId));
 handle('agent:inlineEdit', (opts) => agent.inlineEdit(opts));
+handle('server:test', async (opts) => {
+  try { return await agent.testServer(opts || {}); }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
 
 handle('term:create', (opts) => terms.create({ ...opts, cwd: ws.getRoot() || undefined }));
 handle('term:write', (id, data) => terms.write(id, data));

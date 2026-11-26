@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('kstrl', {
     approve: invoke('agent:approve'), revert: invoke('agent:revert'), inlineEdit: invoke('agent:inlineEdit'),
     onEvent: on('agent:event'),
   },
+  server: { test: invoke('server:test') },
   term: {
     create: invoke('term:create'), write: invoke('term:write'), resize: invoke('term:resize'), kill: invoke('term:kill'),
     onData: on('term:data'), onExit: on('term:exit'),

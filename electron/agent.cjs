@@ -1,23 +1,22 @@
-// Kestrel agent: a streaming tool-use loop over the Anthropic Messages API.
-// The renderer talks to it over IPC; every file/command action is confined to the open workspace.
+// Kestrel agent: a streaming tool-use loop over either
+//  • an Unsloth server (OpenAI-compatible /v1/chat/completions), or
+//  • the Anthropic Messages API.
+// Every file/command action is confined to the open workspace.
 const Anthropic = require('@anthropic-ai/sdk').default;
 const os = require('node:os');
 const ws = require('./workspace.cjs');
 const settings = require('./settings.cjs');
 const { EFFORTS } = require('./models.cjs');
+const oai = require('./providers/openai-compat.cjs');
 
-// Backends that accept the server-side refusal fallback parameter.
+// Anthropic backends that accept the server-side refusal fallback parameter.
 const FALLBACK_OK = new Set(['claude-fable-5-2', 'claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
 
 const READ_TOOLS = [
   {
     name: 'list_files',
     description: 'List files in the workspace (recursively, skipping node_modules/.git/build output). Use to orient yourself in the project.',
-    input_schema: {
-      type: 'object',
-      properties: { path: { type: 'string', description: 'Directory relative to the workspace root. Defaults to ".".' } },
-      required: [],
-    },
+    input_schema: { type: 'object', properties: { path: { type: 'string', description: 'Directory relative to the workspace root. Defaults to ".".' } }, required: [] },
   },
   {
     name: 'read_file',
@@ -54,10 +53,7 @@ const WRITE_TOOLS = [
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File path relative to the workspace root.' },
-        contents: { type: 'string', description: 'The complete new file contents.' },
-      },
+      properties: { path: { type: 'string', description: 'File path relative to the workspace root.' }, contents: { type: 'string', description: 'The complete new file contents.' } },
       required: ['path', 'contents'],
     },
   },
@@ -67,30 +63,22 @@ const WRITE_TOOLS = [
     eager_input_streaming: true,
     input_schema: {
       type: 'object',
-      properties: {
-        path: { type: 'string' },
-        old_string: { type: 'string', description: 'Exact text to replace.' },
-        new_string: { type: 'string', description: 'Replacement text.' },
-      },
+      properties: { path: { type: 'string' }, old_string: { type: 'string', description: 'Exact text to replace.' }, new_string: { type: 'string', description: 'Replacement text.' } },
       required: ['path', 'old_string', 'new_string'],
     },
   },
   {
     name: 'run_command',
     description: 'Run a shell command in the workspace root (PowerShell on Windows, bash elsewhere) and return its combined output and exit code. Use for builds, tests, installs, git. Do not start long-running servers or interactive programs; they are stopped after 2 minutes.',
-    input_schema: {
-      type: 'object',
-      properties: { command: { type: 'string', description: 'The command line to run.' } },
-      required: ['command'],
-    },
+    input_schema: { type: 'object', properties: { command: { type: 'string', description: 'The command line to run.' } }, required: ['command'] },
   },
 ];
 
+const toOpenAITools = (tools) => tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } }));
+
 function validate(tool, input) {
-  if (!input || typeof input !== 'object') return 'input is not an object';
-  for (const key of tool.input_schema.required) {
-    if (!(key in input)) return `missing required field "${key}"`;
-  }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return 'input is not an object';
+  for (const key of tool.input_schema.required) if (!(key in input)) return `missing required field "${key}"`;
   for (const [key, spec] of Object.entries(tool.input_schema.properties)) {
     if (!(key in input) || input[key] == null) continue;
     const v = input[key];
@@ -101,7 +89,14 @@ function validate(tool, input) {
   return null;
 }
 
-function systemPrompt(model, mode) {
+const EFFORT_HINT = {
+  low: 'Effort: Flash. Answer quickly and concisely; keep exploration to the minimum needed.',
+  medium: 'Effort: Normal. Balance speed and thoroughness.',
+  high: 'Effort: High. Take the time to investigate carefully and verify your work.',
+  max: 'Effort: Max. Be exhaustive: investigate deeply, consider edge cases and verify thoroughly.',
+};
+
+function systemPrompt(model, mode, effort, provider) {
   const s = settings.load();
   const root = ws.getRoot();
   const shell = process.platform === 'win32' ? 'PowerShell' : 'bash';
@@ -109,21 +104,41 @@ function systemPrompt(model, mode) {
     `You are Kestrel, the AI coding agent built into KSTRL, an AI-native code editor for Windows. You are running the ${model.name} model. If the user asks which model you are, say you are ${model.name} by KSTRL.`,
     root
       ? `The user's project is open at: ${root}\nAll tool paths are relative to that folder. The OS is ${os.type()} ${os.release()} and commands run in ${shell}.`
-      : 'No project folder is open yet. You can still answer questions; ask the user to open a folder (File → Open Folder) before working with files.',
+      : 'No project folder is open yet. You can still answer questions; ask the user to open or create a project folder before working with files.',
     mode === 'agent'
       ? 'You are in Agent mode: you can read, create and edit files and run commands to complete the task end to end. Look at the relevant code before changing it, make focused edits with edit_file, and verify your work (build, tests, or re-reading the file) when it is practical. When you finish, give a short summary of what changed and anything the user should do next.'
       : 'You are in Ask mode: you can read and search the project but not change it. Answer the question, quoting the relevant code and pointing to files with path:line references. If a change is needed, show it as a code block and suggest switching to Agent mode to apply it.',
     'Format replies in Markdown. Use fenced code blocks with a language tag. Keep explanations tight and practical.',
+    provider === 'unsloth' ? EFFORT_HINT[effort] : '',
     s.customInstructions ? `User's custom instructions:\n${s.customInstructions}` : '',
   ].filter(Boolean).join('\n\n');
 }
 
+function cleanMsg(e) { return String(e && e.message ? e.message : e); }
+
+function describeError(err) {
+  if (err instanceof oai.ProviderError) {
+    if (err.status === 0) return err.message;
+    if (err.status === 401 || err.status === 403) return 'The Unsloth server rejected the request (unauthorized). Check the API key in Settings → Model Server.';
+    if (err.status === 404) return `The Unsloth server could not find that model or endpoint. Check the model selection in Settings → Model Server. (${err.message})`;
+    return `Unsloth server error (${err.status}): ${err.message}`;
+  }
+  if (err instanceof Anthropic.AuthenticationError) return 'Your API key was rejected. Check it in Settings.';
+  if (err instanceof Anthropic.PermissionDeniedError) return 'This API key does not have access to the selected model. Try another Colossus model or change its backend in Settings.';
+  if (err instanceof Anthropic.NotFoundError) return 'The backend model for this Colossus model was not found. Check Settings → Model Server.';
+  if (err instanceof Anthropic.RateLimitError) return 'Rate limited — wait a moment and try again.';
+  if (err instanceof Anthropic.APIConnectionError) return 'Could not reach the model service. Check your internet connection.';
+  if (err instanceof Anthropic.APIError) return `Model service error (${err.status ?? 'unknown'}): ${err.message}`;
+  return cleanMsg(err);
+}
+
 class AgentManager {
   constructor(send) {
-    this.send = send; // (channel, payload) => void
-    this.chats = new Map(); // chatId -> { messages, controller }
-    this.approvals = new Map(); // approvalId -> resolve
-    this.checkpoints = new Map(); // runId -> Map(path -> original|null)
+    this.send = send;
+    this.chats = new Map(); // chatId -> { provider, messages, controller }
+    this.approvals = new Map();
+    this.checkpoints = new Map();
+    this.defaultModelCache = new Map(); // server url -> first model id
   }
 
   emit(chatId, event) { this.send('agent:event', { chatId, ...event }); }
@@ -133,10 +148,7 @@ class AgentManager {
     if (r) { this.approvals.delete(id); r(approved); }
   }
 
-  reset(chatId) {
-    this.stop(chatId);
-    this.chats.delete(chatId);
-  }
+  reset(chatId) { this.stop(chatId); this.chats.delete(chatId); }
 
   stop(chatId) {
     const c = this.chats.get(chatId);
@@ -152,6 +164,7 @@ class AgentManager {
       try {
         if (original === null) await ws.deletePath(p);
         else await ws.writeFile(p, original);
+        this.send('fs:changed', { path: p });
         n++;
       } catch {}
     }
@@ -209,6 +222,7 @@ class AgentManager {
         return { text: `Edited ${input.path}.`, summary: 'edited', diff: { path: input.path, before, after } };
       }
       case 'run_command': {
+        if (!ws.getRoot()) throw new Error('No folder is open. Ask the user to open or create a project first.');
         if (!settings.load().autoRunCommands) {
           const ok = await this.askApproval(chatId, toolId, input.command);
           if (!ok) return { text: 'The user declined to run this command.', summary: 'declined', declined: true };
@@ -223,167 +237,233 @@ class AgentManager {
     }
   }
 
-  async run({ chatId, runId, text, model: modelId, effort: effortId, mode }) {
-    const apiKey = settings.getApiKey();
-    if (!apiKey) {
-      this.emit(chatId, { type: 'error', runId, message: 'No API key configured. Open Settings (Ctrl+,) and add your key to start using the Colossus models.' });
-      this.emit(chatId, { type: 'done', runId });
-      return;
+  async serverModel(model, unsloth, signal) {
+    if (model.serverModel) return model.serverModel;
+    if (this.defaultModelCache.has(unsloth.url)) return this.defaultModelCache.get(unsloth.url);
+    const list = await oai.listModels({ baseURL: unsloth.url, apiKey: unsloth.key, signal });
+    if (!list.length) throw new oai.ProviderError(404, 'The Unsloth server did not list any models.');
+    this.defaultModelCache.set(unsloth.url, list[0]);
+    return list[0];
+  }
+
+  // ---- one model turn, per provider. Each appends the assistant turn to its own history. ----
+
+  async turnAnthropic(chat, ctx) {
+    const { client, model, effort, system, tools, chatId, runId, signal } = ctx;
+    const params = {
+      model: model.backend,
+      max_tokens: 64000,
+      system,
+      thinking: { type: 'adaptive', display: 'summarized' },
+      output_config: { effort },
+      tools,
+      messages: chat.messages,
+    };
+    if (FALLBACK_OK.has(model.backend)) { params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
+    const stream = client.beta.messages.stream(params, { signal });
+    stream.on('text', (delta) => this.emit(chatId, { type: 'text', runId, delta }));
+    stream.on('thinking', (delta) => this.emit(chatId, { type: 'thinking', runId, delta }));
+    stream.on('streamEvent', (ev) => {
+      if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') this.emit(chatId, { type: 'tool_pending', runId, toolId: ev.content_block.id, name: ev.content_block.name });
+    });
+    const message = await stream.finalMessage();
+    if (message.usage) this.emit(chatId, { type: 'usage', runId, usage: message.usage });
+
+    if (message.stop_reason === 'refusal') {
+      const kept = message.content.filter((b) => b.type !== 'tool_use');
+      chat.messages.push({ role: 'assistant', content: kept.length ? kept : [{ type: 'text', text: '(declined)' }] });
+      return { stop: 'refusal', calls: [] };
     }
+    if (message.stop_reason === 'pause_turn') { chat.messages.push({ role: 'assistant', content: message.content }); return { stop: 'pause', calls: [] }; }
+    const uses = message.content.filter((b) => b.type === 'tool_use');
+    if (uses.length && message.stop_reason === 'max_tokens') {
+      const kept = message.content.filter((b) => b.type !== 'tool_use');
+      if (kept.length) chat.messages.push({ role: 'assistant', content: kept });
+      return { stop: 'max_tokens', calls: [] };
+    }
+    chat.messages.push({ role: 'assistant', content: message.content });
+    return { stop: uses.length ? 'tools' : 'end', calls: uses.map((u) => ({ id: u.id, name: u.name, input: u.input })) };
+  }
+
+  async turnOpenAI(chat, ctx) {
+    const { unsloth, modelId, system, tools, chatId, runId, signal } = ctx;
+    const r = await oai.streamChat({
+      baseURL: unsloth.url,
+      apiKey: unsloth.key,
+      signal,
+      body: { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: toOpenAITools(tools), tool_choice: 'auto' },
+      onText: (delta) => this.emit(chatId, { type: 'text', runId, delta }),
+      onThinking: (delta) => this.emit(chatId, { type: 'thinking', runId, delta }),
+      onToolStart: (id, name) => this.emit(chatId, { type: 'tool_pending', runId, toolId: id, name }),
+    });
+    if (r.usage) this.emit(chatId, { type: 'usage', runId, usage: { output_tokens: r.usage.completion_tokens || 0 } });
+    const calls = r.toolCalls.map((c) => {
+      let input;
+      let parseError = null;
+      try { input = JSON.parse(c.rawArgs || '{}'); } catch (e) { parseError = `arguments were not valid JSON (${e.message})`; input = c.rawArgs; }
+      return { id: c.id, name: c.name, input, parseError, rawArgs: c.rawArgs };
+    });
+    const msg = { role: 'assistant', content: r.text || null };
+    if (calls.length) msg.tool_calls = calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.rawArgs || '{}' } }));
+    if (!msg.content && !msg.tool_calls) msg.content = '';
+    chat.messages.push(msg);
+    if (calls.length && r.finish === 'length') return { stop: 'max_tokens', calls };
+    return { stop: calls.length ? 'tools' : 'end', calls };
+  }
+
+  pushResults(chat, results) {
+    if (chat.provider === 'anthropic') {
+      chat.messages.push({ role: 'user', content: results.map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: r.content, ...(r.isError ? { is_error: true } : {}) })) });
+    } else {
+      for (const r of results) chat.messages.push({ role: 'tool', tool_call_id: r.id, content: (r.isError ? 'Error: ' : '') + r.content });
+    }
+  }
+
+  async run({ chatId, runId, text, model: modelId, effort: effortId, mode }) {
     const s = settings.load();
+    const provider = s.provider === 'anthropic' ? 'anthropic' : 'unsloth';
     const model = settings.backendFor(modelId);
     const effort = (EFFORTS.find((e) => e.id === effortId) || EFFORTS[1]).api;
-    const client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
 
-    if (!this.chats.has(chatId)) this.chats.set(chatId, { messages: [], controller: null });
-    const chat = this.chats.get(chatId);
+    const done = () => this.emit(chatId, { type: 'done', runId, changed: this.checkpoints.has(runId) ? [...this.checkpoints.get(runId).keys()] : [] });
+    let unsloth = null;
+    let client = null;
+    if (provider === 'anthropic') {
+      const apiKey = settings.getApiKey();
+      if (!apiKey) { this.emit(chatId, { type: 'error', runId, message: 'No API key configured. Open Settings → Model Server to connect a model backend.' }); return done(); }
+      client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
+    } else {
+      unsloth = settings.getUnsloth();
+      if (!unsloth.url) { this.emit(chatId, { type: 'error', runId, message: 'Your Unsloth server is not connected yet. Open Settings → Model Server and add its URL.' }); return done(); }
+    }
+
+    let chat = this.chats.get(chatId);
+    if (!chat || chat.provider !== provider) {
+      if (chat && chat.messages.length) this.emit(chatId, { type: 'notice', runId, message: 'Model server changed — starting a fresh context for this chat.' });
+      chat = { provider, messages: [], controller: null };
+      this.chats.set(chatId, chat);
+    }
     const controller = new AbortController();
     chat.controller = controller;
     chat.messages.push({ role: 'user', content: text });
 
     const tools = mode === 'agent' ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
     const toolByName = Object.fromEntries(tools.map((t) => [t.name, t]));
-    const useFallback = FALLBACK_OK.has(model.backend);
-    let jsonRetries = 0;
+    const system = systemPrompt(model, mode, effort, provider);
+    let retries = 0;
     let turns = 0;
 
     try {
+      const ctx = { client, unsloth, model, effort, system, tools, chatId, runId, signal: controller.signal };
+      if (provider === 'unsloth') ctx.modelId = await this.serverModel(model, unsloth, controller.signal);
       while (true) {
         if (++turns > 60) { this.emit(chatId, { type: 'error', runId, message: 'Stopped after 60 steps. Send a follow-up to continue.' }); break; }
         this.emit(chatId, { type: 'turn_start', runId });
 
-        const params = {
-          model: model.backend,
-          max_tokens: 64000,
-          system: systemPrompt(model, mode),
-          thinking: { type: 'adaptive', display: 'summarized' },
-          output_config: { effort },
-          tools,
-          messages: chat.messages,
-        };
-        if (useFallback) { params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
-
-        const stream = client.beta.messages.stream(params, { signal: controller.signal });
-        stream.on('text', (delta) => this.emit(chatId, { type: 'text', runId, delta }));
-        stream.on('thinking', (delta) => this.emit(chatId, { type: 'thinking', runId, delta }));
-        stream.on('streamEvent', (ev) => {
-          if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') {
-            this.emit(chatId, { type: 'tool_pending', runId, toolId: ev.content_block.id, name: ev.content_block.name });
-          }
-        });
-
-        let message;
+        let turn;
         try {
-          message = await stream.finalMessage();
-          jsonRetries = 0;
+          turn = provider === 'anthropic' ? await this.turnAnthropic(chat, ctx) : await this.turnOpenAI(chat, ctx);
+          retries = 0;
         } catch (err) {
           if (controller.signal.aborted) throw err;
-          if (err instanceof Anthropic.APIError || jsonRetries++ >= 2) throw err;
+          const apiErr = err instanceof Anthropic.APIError || (err instanceof oai.ProviderError && err.status !== 0);
+          if (apiErr || retries++ >= 2) throw err;
           this.emit(chatId, { type: 'notice', runId, message: 'Connection hiccup — retrying this step…' });
           continue;
         }
 
-        if (message.usage) this.emit(chatId, { type: 'usage', runId, usage: message.usage });
-
-        if (message.stop_reason === 'refusal') {
-          chat.messages.push({ role: 'assistant', content: message.content.filter((b) => b.type !== 'tool_use') .length ? message.content.filter((b) => b.type !== 'tool_use') : [{ type: 'text', text: '(declined)' }] });
-          this.emit(chatId, { type: 'error', runId, message: 'The model declined this request.' });
-          break;
-        }
-        if (message.stop_reason === 'pause_turn') { chat.messages.push({ role: 'assistant', content: message.content }); continue; }
-
-        const toolUses = message.content.filter((b) => b.type === 'tool_use');
-        if (toolUses.length && message.stop_reason === 'max_tokens') {
-          chat.messages.push({ role: 'assistant', content: message.content.filter((b) => b.type !== 'tool_use') });
-          if (chat.messages[chat.messages.length - 1].content.length === 0) chat.messages.pop();
+        if (turn.stop === 'refusal') { this.emit(chatId, { type: 'error', runId, message: 'The model declined this request.' }); break; }
+        if (turn.stop === 'pause') continue;
+        if (turn.stop === 'max_tokens') {
+          if (provider === 'unsloth' && turn.calls.length) this.pushResults(chat, turn.calls.map((c) => ({ id: c.id, content: 'Output limit reached before this call was complete; it was not run.', isError: true })));
           this.emit(chatId, { type: 'error', runId, message: 'The response hit the output limit mid tool call. Ask Kestrel to continue in smaller steps.' });
           break;
         }
-
-        chat.messages.push({ role: 'assistant', content: message.content });
-        if (!toolUses.length) break;
+        if (turn.stop === 'end') break;
 
         const results = [];
-        for (const tu of toolUses) {
-          const def = toolByName[tu.name];
-          this.emit(chatId, { type: 'tool_start', runId, toolId: tu.id, name: tu.name, input: tu.input });
+        for (const call of turn.calls) {
+          const def = toolByName[call.name];
+          this.emit(chatId, { type: 'tool_start', runId, toolId: call.id, name: call.name, input: typeof call.input === 'object' ? call.input : {} });
           if (controller.signal.aborted) {
-            results.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: 'Cancelled by the user.' });
-            this.emit(chatId, { type: 'tool_end', runId, toolId: tu.id, ok: false, summary: 'cancelled' });
+            results.push({ id: call.id, content: 'Cancelled by the user.', isError: true });
+            this.emit(chatId, { type: 'tool_end', runId, toolId: call.id, ok: false, summary: 'cancelled' });
             continue;
           }
-          const problem = def ? validate(def, tu.input) : `tool ${tu.name} is not available in ${mode} mode`;
+          const problem = call.parseError || (def ? validate(def, call.input) : `tool ${call.name} is not available in ${mode} mode`);
           if (problem) {
-            results.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: `Invalid input: ${problem}. Input was: ${JSON.stringify(tu.input).slice(0, 2000)}` });
-            this.emit(chatId, { type: 'tool_end', runId, toolId: tu.id, ok: false, summary: problem });
+            results.push({ id: call.id, content: `Invalid input: ${problem}. Input was: ${(typeof call.input === 'string' ? call.input : JSON.stringify(call.input)).slice(0, 2000)}`, isError: true });
+            this.emit(chatId, { type: 'tool_end', runId, toolId: call.id, ok: false, summary: problem });
             continue;
           }
           try {
-            const r = await this.execTool(chatId, runId, tu.name, tu.input, tu.id, controller.signal);
-            results.push({ type: 'tool_result', tool_use_id: tu.id, content: r.text });
-            this.emit(chatId, { type: 'tool_end', runId, toolId: tu.id, ok: !r.declined, summary: r.summary, diff: r.diff, output: tu.name === 'run_command' ? r.text : undefined });
+            const r = await this.execTool(chatId, runId, call.name, call.input, call.id, controller.signal);
+            results.push({ id: call.id, content: r.text });
+            this.emit(chatId, { type: 'tool_end', runId, toolId: call.id, ok: !r.declined, summary: r.summary, diff: r.diff, output: call.name === 'run_command' ? r.text : undefined });
           } catch (e) {
-            results.push({ type: 'tool_result', tool_use_id: tu.id, is_error: true, content: String(e.message || e) });
-            this.emit(chatId, { type: 'tool_end', runId, toolId: tu.id, ok: false, summary: String(e.message || e) });
+            results.push({ id: call.id, content: cleanMsg(e), isError: true });
+            this.emit(chatId, { type: 'tool_end', runId, toolId: call.id, ok: false, summary: cleanMsg(e) });
           }
         }
-        chat.messages.push({ role: 'user', content: results });
+        this.pushResults(chat, results);
         if (controller.signal.aborted) break;
       }
     } catch (err) {
+      const last = chat.messages[chat.messages.length - 1];
       if (controller.signal.aborted) {
-        const last = chat.messages[chat.messages.length - 1];
-        if (last && last.role === 'user') chat.messages.push({ role: 'assistant', content: [{ type: 'text', text: '(stopped by the user)' }] });
+        if (last && (last.role === 'user' || last.role === 'tool')) chat.messages.push(provider === 'anthropic' ? { role: 'assistant', content: [{ type: 'text', text: '(stopped by the user)' }] } : { role: 'assistant', content: '(stopped by the user)' });
         this.emit(chatId, { type: 'notice', runId, message: 'Stopped.' });
       } else {
-        // Keep history valid: drop the unanswered user turn so the user can retry.
-        const last = chat.messages[chat.messages.length - 1];
         if (last && last.role === 'user' && typeof last.content === 'string') chat.messages.pop();
-        else if (last && last.role === 'user') chat.messages.push({ role: 'assistant', content: [{ type: 'text', text: '(error)' }] });
+        else if (last && (last.role === 'user' || last.role === 'tool')) chat.messages.push(provider === 'anthropic' ? { role: 'assistant', content: [{ type: 'text', text: '(error)' }] } : { role: 'assistant', content: '(error)' });
         this.emit(chatId, { type: 'error', runId, message: describeError(err) });
       }
     } finally {
       chat.controller = null;
-      this.emit(chatId, { type: 'done', runId, changed: this.checkpoints.has(runId) ? [...this.checkpoints.get(runId).keys()] : [] });
+      done();
     }
   }
 
   // Single-shot completion used by inline edit (Ctrl+K) — returns replacement code only.
   async inlineEdit({ instruction, code, language, path: filePath, before, after, model: modelId }) {
-    const apiKey = settings.getApiKey();
-    if (!apiKey) throw new Error('No API key configured. Open Settings to add one.');
     const s = settings.load();
     const model = settings.backendFor(modelId);
-    const client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
-    const params = {
-      model: model.backend,
-      max_tokens: 32000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
-      system: 'You are the inline code editor inside KSTRL. Rewrite the selected code according to the instruction. Reply with ONLY the replacement code for the selection — no explanations and no Markdown fences. Preserve the surrounding indentation style.',
-      messages: [{
-        role: 'user',
-        content: `File: ${filePath || 'untitled'} (${language})\n\n<before_selection>\n${before}\n</before_selection>\n<selection>\n${code}\n</selection>\n<after_selection>\n${after}\n</after_selection>\n\nInstruction: ${instruction}`,
-      }],
-    };
-    if (FALLBACK_OK.has(model.backend)) { params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
-    const msg = await client.beta.messages.stream(params).finalMessage();
-    if (msg.stop_reason === 'refusal') throw new Error('The model declined this edit.');
-    let out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const system = 'You are the inline code editor inside KSTRL. Rewrite the selected code according to the instruction. Reply with ONLY the replacement code for the selection — no explanations and no Markdown fences. Preserve the surrounding indentation style.';
+    const user = `File: ${filePath || 'untitled'} (${language})\n\n<before_selection>\n${before}\n</before_selection>\n<selection>\n${code}\n</selection>\n<after_selection>\n${after}\n</after_selection>\n\nInstruction: ${instruction}`;
+    let out;
+    try {
+      if (s.provider === 'anthropic') {
+        const apiKey = settings.getApiKey();
+        if (!apiKey) throw new Error('No API key configured. Open Settings → Model Server.');
+        const client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
+        const params = { model: model.backend, max_tokens: 32000, thinking: { type: 'adaptive' }, output_config: { effort: 'low' }, system, messages: [{ role: 'user', content: user }] };
+        if (FALLBACK_OK.has(model.backend)) { params.betas = ['server-side-fallback-2026-07-01']; params.fallbacks = 'default'; }
+        const msg = await client.beta.messages.stream(params).finalMessage();
+        if (msg.stop_reason === 'refusal') throw new Error('The model declined this edit.');
+        out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+      } else {
+        const unsloth = settings.getUnsloth();
+        if (!unsloth.url) throw new Error('Your Unsloth server is not connected yet. Open Settings → Model Server.');
+        const r = await oai.streamChat({
+          baseURL: unsloth.url, apiKey: unsloth.key,
+          body: { model: await this.serverModel(model, unsloth), messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },
+          onText: () => {}, onThinking: () => {}, onToolStart: () => {},
+        });
+        out = r.text;
+      }
+    } catch (e) { throw new Error(describeError(e)); }
+    out = out.replace(/^\s+|\s+$/g, (m) => (m.includes('\n') ? '' : m));
     const fence = out.match(/^\s*```[\w-]*\n([\s\S]*?)\n```\s*$/);
     if (fence) out = fence[1];
     return out;
   }
-}
 
-function describeError(err) {
-  if (err instanceof Anthropic.AuthenticationError) return 'Your API key was rejected. Check it in Settings.';
-  if (err instanceof Anthropic.PermissionDeniedError) return 'This API key does not have access to the selected model. Try another Colossus model or change its backend in Settings → Models.';
-  if (err instanceof Anthropic.NotFoundError) return 'The backend model for this Colossus model was not found. Check Settings → Models.';
-  if (err instanceof Anthropic.RateLimitError) return 'Rate limited — wait a moment and try again.';
-  if (err instanceof Anthropic.APIConnectionError) return 'Could not reach the model service. Check your internet connection.';
-  if (err instanceof Anthropic.APIError) return `Model service error (${err.status ?? 'unknown'}): ${err.message}`;
-  return String(err && err.message ? err.message : err);
+  async testServer({ url, key }) {
+    const unsloth = settings.getUnsloth();
+    const models = await oai.listModels({ baseURL: url ?? unsloth.url, apiKey: key ?? unsloth.key });
+    this.defaultModelCache.clear();
+    return { ok: true, url: oai.normalizeBase(url ?? unsloth.url), models };
+  }
 }
 
 module.exports = { AgentManager };

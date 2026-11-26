@@ -6,28 +6,34 @@ const { MODELS } = require('./models.cjs');
 const file = () => path.join(app.getPath('userData'), 'kstrl-settings.json');
 
 const DEFAULTS = {
-  apiKeyEnc: null, // safeStorage-encrypted API key (base64)
-  baseURL: '', // optional custom Anthropic-compatible endpoint
+  provider: 'unsloth', // 'unsloth' (OpenAI-compatible server) | 'anthropic'
+  // Unsloth server
+  unslothURL: '',
+  unslothKeyEnc: null,
+  unslothModels: {}, // { [colossusId]: serverModelId }
+  // Anthropic API (optional alternative)
+  apiKeyEnc: null,
+  baseURL: '',
+  backendOverrides: {},
+  // Kestrel
   model: 'colossus-3',
   effort: 'normal',
   mode: 'agent',
   autoRunCommands: false,
-  backendOverrides: {}, // { [kstrlModelId]: backendModelId }
+  customInstructions: '',
+  // Workspace / UI
   recentFolders: [],
   lastFolder: null,
   fontSize: 14,
-  customInstructions: '',
+  onboarded: false,
 };
 
 let cache = null;
 
 function load() {
   if (cache) return cache;
-  try {
-    cache = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(file(), 'utf8')) };
-  } catch {
-    cache = { ...DEFAULTS };
-  }
+  try { cache = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(file(), 'utf8')) }; }
+  catch { cache = { ...DEFAULTS }; }
   return cache;
 }
 
@@ -36,26 +42,15 @@ function save() {
   fs.writeFileSync(file(), JSON.stringify(cache, null, 2));
 }
 
-function update(patch) {
-  load();
-  const next = { ...patch };
-  if ('apiKey' in next) {
-    const key = (next.apiKey || '').trim();
-    delete next.apiKey;
-    if (!key) cache.apiKeyEnc = null;
-    else if (safeStorage.isEncryptionAvailable()) cache.apiKeyEnc = 'enc:' + safeStorage.encryptString(key).toString('base64');
-    else cache.apiKeyEnc = 'raw:' + Buffer.from(key).toString('base64');
-  }
-  Object.assign(cache, next);
-  save();
-  return publicView();
+function seal(value) {
+  const v = (value || '').trim();
+  if (!v) return null;
+  if (safeStorage.isEncryptionAvailable()) return 'enc:' + safeStorage.encryptString(v).toString('base64');
+  return 'raw:' + Buffer.from(v).toString('base64');
 }
 
-function getApiKey() {
-  load();
-  if (process.env.KSTRL_API_KEY) return process.env.KSTRL_API_KEY;
-  const v = cache.apiKeyEnc;
-  if (!v) return process.env.ANTHROPIC_API_KEY || null;
+function unseal(v) {
+  if (!v) return null;
   try {
     if (v.startsWith('enc:')) return safeStorage.decryptString(Buffer.from(v.slice(4), 'base64'));
     if (v.startsWith('raw:')) return Buffer.from(v.slice(4), 'base64').toString('utf8');
@@ -63,23 +58,51 @@ function getApiKey() {
   return null;
 }
 
+function update(patch) {
+  load();
+  const next = { ...patch };
+  if ('apiKey' in next) { cache.apiKeyEnc = seal(next.apiKey); delete next.apiKey; }
+  if ('unslothKey' in next) { cache.unslothKeyEnc = seal(next.unslothKey); delete next.unslothKey; }
+  Object.assign(cache, next);
+  save();
+  return publicView();
+}
+
+function getApiKey() {
+  load();
+  return process.env.KSTRL_API_KEY || unseal(cache.apiKeyEnc) || process.env.ANTHROPIC_API_KEY || null;
+}
+
+function getUnsloth() {
+  load();
+  return {
+    url: process.env.KSTRL_UNSLOTH_URL || cache.unslothURL,
+    key: process.env.KSTRL_UNSLOTH_KEY || unseal(cache.unslothKeyEnc) || '',
+  };
+}
+
 function backendFor(modelId) {
   load();
   const m = MODELS.find((x) => x.id === modelId) || MODELS[MODELS.length - 1];
-  return { ...m, backend: cache.backendOverrides[m.id] || m.backend };
+  return { ...m, backend: cache.backendOverrides[m.id] || m.backend, serverModel: cache.unslothModels[m.id] || '' };
+}
+
+function isConfigured() {
+  load();
+  return cache.provider === 'anthropic' ? !!getApiKey() : !!getUnsloth().url;
 }
 
 function publicView() {
   load();
-  const { apiKeyEnc, ...rest } = cache;
-  return { ...rest, hasApiKey: !!getApiKey() };
+  const { apiKeyEnc, unslothKeyEnc, ...rest } = cache;
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!getUnsloth().key, configured: isConfigured(), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {
   load();
-  cache.recentFolders = [folder, ...cache.recentFolders.filter((f) => f !== folder)].slice(0, 8);
+  cache.recentFolders = [folder, ...cache.recentFolders.filter((f) => f !== folder)].slice(0, 12);
   cache.lastFolder = folder;
   save();
 }
 
-module.exports = { load, update, getApiKey, backendFor, publicView, addRecent };
+module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured };

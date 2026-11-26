@@ -13,6 +13,7 @@ Effort levels (from kstrlsi): **Flash · Normal · High · Max**.
 
 ## Features
 
+- **Agents home**: a chat-first start screen with projects, chat history, Getting Started, and a centered composer. Switch to the full editor with **IDE ↗** (`Ctrl+E`).
 - **Kestrel Agent panel** (`Ctrl+I`). Use **Agent** mode to read, write and edit files and run commands, or **Ask** mode for read-only answers. Kestrel streams its thought process and shows every tool call as a card.
 - **Change review.** Every file Kestrel touches gets a +/- diffstat and a side-by-side diff. You can **Revert all** for any run.
 - **Command approval.** Kestrel asks before it runs a terminal command. You can turn on auto-run in Settings.
@@ -26,17 +27,14 @@ Effort levels (from kstrlsi): **Flash · Normal · High · Max**.
 ## Setup
 
 1. Install and launch KSTRL.
-2. Open **Settings** (`Ctrl+,`) and paste your API key. The Colossus models run on the Anthropic API. The key is encrypted with Windows secure storage (DPAPI).
-3. Open a folder (`Ctrl+O`) and start a chat with Kestrel (`Ctrl+I`).
+2. In the **Getting Started** card, click **Connect Unsloth Server**. You can also open Settings (`Ctrl+,`) → **Model Server**.
+3. Enter your Unsloth server's URL, plus an API key if your server needs one, then click **Test connection**.
+4. Choose which server model powers each Colossus model. "Server default" uses the first model the server lists.
+5. Start a chat on the Agents home screen, or open the **IDE** (`Ctrl+E`).
 
-Under **Settings → Models** you can change which backend model serves each Colossus model. The defaults are:
+KSTRL talks to the server's OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`) with streaming and tool calling. It also understands `<think>` reasoning blocks and `reasoning_content`, and shows both as Kestrel's thought process.
 
-| Colossus | Backend |
-| --- | --- |
-| Colossus 2 | `claude-haiku-5-5` |
-| Colossus 2.2 UC | `claude-sonnet-5-5` |
-| Colossus 2.3 | `claude-opus-5-5` |
-| Colossus 3 | `claude-fable-5-2` |
+You can also use the Anthropic API instead: Settings → Model Server → **Anthropic API**.
 
 ## Develop
 
