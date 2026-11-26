@@ -1,10 +1,17 @@
 name: Build Windows
 
-# Push a tag like v1.0.1 to publish a release. Installed copies of KSTRL
-# pick it up automatically (they check GitHub Releases on launch and every 4h).
-# "Run workflow" from the Actions tab builds the .exe files without publishing.
+# Publish a release either way:
+#  • Actions tab → Build Windows → Run workflow (publish = true), or
+#  • push a tag like v1.0.1 that matches package.json's version.
+# The release is tagged v<package.json version>. Installed copies of KSTRL pick it up
+# automatically (they check GitHub Releases on launch and every 4h).
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a GitHub Release (v<package.json version>) that installed apps update to'
+        type: boolean
+        default: true
   push:
     tags: ['v*']
 
@@ -32,13 +39,13 @@ jobs:
       - run: npm run build
 
       - name: Build and publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
         run: npx electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build only
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && !inputs.publish }}
         run: npx electron-builder --win --x64 --publish never
 
       - uses: actions/upload-artifact@v4
