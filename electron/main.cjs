@@ -6,6 +6,7 @@ const ws = require('./workspace.cjs');
 const { AgentManager } = require('./agent.cjs');
 const { TerminalManager } = require('./terminal.cjs');
 const { MODELS, EFFORTS } = require('./models.cjs');
+const updater = require('./updater.cjs');
 
 const isDev = !!process.env.KSTRL_DEV;
 let win = null;
@@ -121,6 +122,10 @@ handle('server:test', async (opts) => {
   catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
+handle('update:state', () => updater.getState());
+handle('update:check', () => updater.check());
+handle('update:install', () => updater.install());
+
 handle('term:create', (opts) => terms.create({ ...opts, cwd: ws.getRoot() || undefined }));
 handle('term:write', (id, data) => terms.write(id, data));
 handle('term:resize', (id, c, r) => terms.resize(id, c, r));
@@ -136,6 +141,7 @@ else {
     const argDir = process.argv.slice(1).find((a) => !a.startsWith('-') && path.resolve(a) !== appPath && fs.existsSync(a) && fs.statSync(a).isDirectory());
     try { if (argDir) openWorkspace(argDir); else if (s.lastFolder && fs.existsSync(s.lastFolder)) openWorkspace(s.lastFolder); } catch {}
     createWindow();
+    updater.init(send);
   });
 }
 

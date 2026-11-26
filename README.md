@@ -55,6 +55,16 @@ You can also run the **Build Windows** GitHub Action from the Actions tab, or pu
 
 To regenerate the app icon from `build/logo.png`, run `npm run icons`.
 
+## Releasing updates
+
+Installed copies of KSTRL update themselves from this repo's GitHub Releases. They check at launch and every 4 hours, download in the background, and show **Restart to update**.
+
+1. Bump `version` in `package.json` (for example `1.0.1`) and commit.
+2. Push a matching tag: `git tag v1.0.1 && git push origin v1.0.1`.
+3. The **Build Windows** action builds the installer on Windows and publishes the release. Users get the update automatically.
+
+Only the installed version (`KSTRL-Setup-x.y.z.exe`) can auto-update. The portable `.exe` can't replace itself.
+
 ## Project layout
 
 ```

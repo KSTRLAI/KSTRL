@@ -54,6 +54,12 @@ export default function App() {
   const agentRef = useRef(null);
   const homeChatRef = useRef(null);
   const chatState = useChats();
+  const [update, setUpdate] = useState(null);
+  const [updateDismissed, setUpdateDismissed] = useState(null);
+  useEffect(() => {
+    api.update.state().then(setUpdate);
+    return api.update.onStatus(setUpdate);
+  }, []);
 
   const toast = useCallback((text) => {
     const id = Math.random();
@@ -410,8 +416,22 @@ export default function App() {
           {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'Unsloth server') : 'Connect model server'}
         </button>
         <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span className="kestrel">{currentModel?.name || '—'}</span></button>
+        {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
+        {update?.status === 'ready' && <button className="item" style={{ color: '#ff9a9a' }} onClick={() => api.update.install()}>Restart to update</button>}
         <span className="item">{settings.mode === 'ask' ? 'Ask' : 'Agent'}</span>
       </div>
+
+      {update?.status === 'ready' && updateDismissed !== update.version && (
+        <div className="update-banner glass-strong">
+          <img src="./logo.png" alt="" />
+          <div style={{ flex: 1 }}>
+            <div className="t">KSTRL {update.version} is ready</div>
+            <div className="d">Restart to finish updating. Your chats in progress will be closed.</div>
+          </div>
+          <button className="btn ghost" onClick={() => setUpdateDismissed(update.version)}>Later</button>
+          <button className="btn grad" onClick={() => api.update.install()}>Restart</button>
+        </div>
+      )}
 
       {moreMenu && (
         <Popover anchor={moreMenu} onClose={() => setMoreMenu(null)} width={240} below>

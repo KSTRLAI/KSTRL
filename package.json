@@ -13,10 +13,12 @@
     "start": "npm run build && electron .",
     "icons": "node scripts/make-icons.mjs",
     "dist:win": "npm run build && electron-builder --win --x64",
-    "dist:win:portable": "npm run build && electron-builder --win portable --x64"
+    "dist:win:portable": "npm run build && electron-builder --win portable --x64",
+    "release:win": "npm run build && electron-builder --win --x64 --publish always"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.14.0"
+    "@anthropic-ai/sdk": "^1.14.0",
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -90,7 +92,15 @@
     "npmRebuild": false,
     "portable": {
       "artifactName": "KSTRL-${version}-Portable.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AmirFoodDelivery",
+        "repo": "KSTRL",
+        "releaseType": "release"
+      }
+    ]
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"

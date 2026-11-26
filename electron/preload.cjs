@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('kstrl', {
     onEvent: on('agent:event'),
   },
   server: { test: invoke('server:test') },
+  update: { state: invoke('update:state'), check: invoke('update:check'), install: invoke('update:install'), onStatus: on('update:status') },
   term: {
     create: invoke('term:create'), write: invoke('term:write'), resize: invoke('term:resize'), kill: invoke('term:kill'),
     onData: on('term:data'), onExit: on('term:exit'),

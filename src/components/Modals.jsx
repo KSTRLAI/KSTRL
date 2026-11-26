@@ -103,6 +103,31 @@ function ServerTab({ info, settings, onChange }) {
   );
 }
 
+function UpdateRow() {
+  const [u, setU] = useState(null);
+  useEffect(() => { api.update.state().then(setU); return api.update.onStatus((x) => setU((p) => ({ ...p, ...x }))); }, []);
+  if (!u) return null;
+  if (u.status === 'unsupported') {
+    return <div className="hint" style={{ maxWidth: 420 }}>{u.reason === 'portable' ? 'This is the portable version, which can’t update itself. Install KSTRL with the Setup installer to get automatic updates.' : 'Automatic updates are available in the installed Windows app.'}</div>;
+  }
+  const text = {
+    idle: 'Updates install automatically.',
+    checking: 'Checking for updates…',
+    current: 'You’re on the latest version.',
+    downloading: `Downloading ${u.version || 'update'}… ${u.percent ?? 0}%`,
+    ready: `Version ${u.version} is ready.`,
+    error: `Update check failed: ${u.error}`,
+  }[u.status] || '';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span className="hint" style={{ margin: 0 }}>{text}</span>
+      {u.status === 'ready'
+        ? <button className="btn grad" onClick={() => api.update.install()}>Restart to update</button>
+        : <button className="btn" disabled={u.status === 'checking' || u.status === 'downloading'} onClick={() => api.update.check()}>Check for updates</button>}
+    </div>
+  );
+}
+
 export function SettingsModal({ info, settings, onChange, onClose, initialTab = 'general' }) {
   const [tab, setTab] = useState(initialTab === 'models' ? 'server' : initialTab);
   useEffect(() => {
@@ -158,6 +183,7 @@ export function SettingsModal({ info, settings, onChange, onClose, initialTab = 
               <img src="./icon.png" alt="" style={{ width: 84, borderRadius: 20 }} />
               <div className="mono" style={{ letterSpacing: '.4em', fontSize: 18, paddingLeft: '.4em' }}>KSTRL</div>
               <div className="mono" style={{ color: 'var(--text-3)', fontSize: 11.5 }}>Version {info?.version} · {info?.platform === 'win32' ? 'Windows' : info?.platform}</div>
+              <UpdateRow />
               <p className="mono" style={{ color: 'var(--text-2)', fontSize: 12, maxWidth: 440, lineHeight: 1.6 }}>
                 An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by Colossus 2, 2.2 UC, 2.3 and the flagship Colossus 3.
               </p>

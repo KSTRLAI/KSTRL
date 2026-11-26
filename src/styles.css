@@ -478,3 +478,7 @@ select.input option { background: #16161a; }
 .hero-wrap { margin-top: 0; transform: translateY(-4vh); }
 .home-foot { position: absolute; left: 0; right: 0; bottom: 18px; margin: 0; padding: 0; }
 .grad:disabled, .grad[disabled] { filter: saturate(.55) brightness(.8); opacity: .55; box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+.update-banner { position: fixed; right: 16px; bottom: 36px; z-index: 1500; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; width: min(460px, 92vw); }
+.update-banner img { width: 26px; height: 26px; }
+.update-banner .t { font-size: 13px; font-weight: 600; }
+.update-banner .d { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
