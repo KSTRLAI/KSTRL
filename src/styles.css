@@ -719,3 +719,9 @@ html.mac .titlebar .logo { display: none; }
 .pill.img { padding-left: 3px; }
 .pill.img img { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
 .msg-img { height: 64px; max-width: 160px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); }
+
+/* running agents */
+.hs-count { margin-left: 6px; background: rgba(255,255,255,.1); color: var(--text-2); border-radius: 999px; padding: 0 6px; font-size: 10.5px; }
+.hs-running { padding-bottom: 6px; }
+.hs-running .proj { color: var(--text-3); font-size: 11.5px; flex-shrink: 0; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-running .stop { display: grid !important; }

@@ -10,6 +10,7 @@ const { spawn } = require('node:child_process');
 const updater = require('./updater.cjs');
 const auth = require('./auth.cjs');
 const gitOps = require('./git.cjs');
+const crash = require('./crash.cjs');
 
 const isDev = !!process.env.KSTRL_DEV;
 let win = null; // Agents home window
@@ -187,6 +188,9 @@ handle('git:message', async () => {
   return text.replace(/^```\w*\n?|```$/g, '').trim();
 });
 
+handle('log:error', (source, message, stack) => crash.report(String(source || 'renderer'), { message: String(message || ''), stack: String(stack || '') }));
+handle('log:openFolder', () => { fs.mkdirSync(crash.logsDir(), { recursive: true }); return shell.openPath(crash.logsDir()); });
+
 handle('auth:login', () => auth.login());
 handle('auth:logout', () => auth.logout());
 handle('auth:refresh', () => auth.refresh());
@@ -270,6 +274,7 @@ else {
     const appPath = path.resolve(app.getAppPath());
     const argDir = process.argv.slice(1).find((a) => !a.startsWith('-') && path.resolve(a) !== appPath && fs.existsSync(a) && fs.statSync(a).isDirectory());
     try { if (argDir) openWorkspace(argDir); else if (s.reopenLastProject !== false && s.lastFolder && fs.existsSync(s.lastFolder)) openWorkspace(s.lastFolder); } catch {}
+    crash.init();
     createWindow('home');
     auth.init(send);
     const startLink = linkFrom(process.argv);

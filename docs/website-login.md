@@ -86,3 +86,19 @@ The app sends the mode in the `X-KSTRL-Mode` header (`build`, `plan`, `ask`, `co
 ## 4. Upgrading to MAX
 
 Take payment on the website (e.g. Stripe) and mark the account as `max`. The account endpoint then returns `"plan": "max"` and the app picks it up within 10 minutes, or right away after the next reply.
+
+## 5. Crash reports (optional)
+
+If a user turns on **Settings → General → Send Crash Reports**, KSTRL posts errors to:
+
+```
+POST {API_URL}/v1/kstrl/crash
+Authorization: Bearer <api key>
+{ "version": "1.5.0", "platform": "win32", "arch": "x64", "source": "main|renderer|process", "message": "…", "stack": "…" }
+```
+
+The home folder is replaced with `~` before sending; no code or chats are included. Each distinct error is sent at most once an hour. Errors are always written locally to the logs folder (Settings → General → Open Logs Folder).
+
+## 6. Built-in API URL
+
+Set the repository variable **KSTRL_API_URL** (GitHub → repo → Settings → Secrets and variables → Actions → Variables) to your API's address, e.g. `https://api.kstrl.ai`. The next build includes it, so the login dialog no longer asks for an API URL.

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { fmtKbd, mod } from '../lib/keys.js';
-import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
+import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown, Square } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
 import Avatar from './Avatar.jsx';
@@ -66,6 +66,22 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
         <button className={'hs-item' + (homePage === 'automations' ? ' active' : '')} onClick={onAutomations}><Bot size={16} /> Automations {(settings.automations || []).some((a) => a.enabled && a.schedule?.type !== 'manual') && <span className="hs-dot" title="Scheduled automations active" />}</button>
         <button className="hs-item" onClick={onCustomize}><SlidersHorizontal size={16} /> Customize</button>
       </nav>
+
+      {s.chats.some((c) => c.running) && (
+        <>
+          <div className="hs-section"><span>Running agents</span><span className="hs-count">{s.chats.filter((c) => c.running).length}</span></div>
+          <div className="hs-running">
+            {s.chats.filter((c) => c.running).map((c) => (
+              <div key={c.id} className={'hs-chat' + (c.id === current.id ? ' active' : '')} style={{ paddingLeft: 14 }} onClick={() => { store.setActive(c.id); onChats(); }} title={c.title}>
+                <Loader2 size={12} className="spin" />
+                <span className="name">{c.title}</span>
+                <span className="proj">{base(c.project)}</span>
+                <button className="x stop" title="Stop" onClick={(e) => { e.stopPropagation(); store.stop(c.id); }}><Square size={9} fill="currentColor" /></button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="hs-section">
         <span>Projects</span>
@@ -136,7 +152,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
             {[
               [SettingsIcon, 'Settings', 'Ctrl+,', onSettings],
               '-',
-              [RefreshCw, 'Check for Updates', '', async () => { const u = await window.kstrl.update.check(); onToast?.(u?.status === 'unsupported' ? 'Updates work in the installed app' : 'Checking for updates…'); }],
+              [RefreshCw, 'Check for Updates', '', async () => { const u = await window.kstrl.update.check(); onToast?.(u?.status === 'unsupported' ? (u.reason === 'platform' ? 'On Mac, download new versions from the KSTRL releases page' : 'Updates work in the installed app') : 'Checking for updates…'); }],
               [BookOpen, 'Docs', '', () => window.kstrl.shell.openExternal(SITE)],
               [Keyboard, 'Shortcuts', '', onShortcuts],
               [TriangleAlert, 'Report Issue', '', () => window.kstrl.shell.openExternal(ISSUES)],

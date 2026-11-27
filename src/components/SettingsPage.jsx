@@ -177,6 +177,8 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       { t: 'System Tray Icon', d: 'Show KSTRL in the system tray', c: <Toggle on={!!settings.trayIcon} onChange={set('trayIcon')} /> },
     ] },
     { tab: 'general', title: 'Updates', rows: [
+      { t: 'Send Crash Reports', d: 'When something breaks, send the error (no code or chats) to KSTRL so it can be fixed', c: <Toggle on={!!settings.crashReports} onChange={set('crashReports')} /> },
+      { t: 'Logs', d: 'Error log for troubleshooting', c: <button className="btn" onClick={() => api.log.openFolder()}>Open Logs Folder</button> },
       { t: 'Automatic Updates', d: 'Download new versions of KSTRL in the background and install them on restart', c: <Toggle on={settings.autoUpdate !== false} onChange={set('autoUpdate')} /> },
       { t: `Version ${info?.version || ''}`, d: 'Check GitHub for a newer release', c: <UpdateControl /> },
     ] },

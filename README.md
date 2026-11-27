@@ -14,6 +14,21 @@ Effort levels: **Flash · Normal · High · Max · UltraCode**.
 
 Modes: **Build** (edits files and runs commands), **Plan** (brainstorm and plan, read-only, on Colossus 2.1) and **Ask** (read-only answers).
 
+## Features added in 1.5
+
+- **Log in with kstrlsi:** one click if you're already logged in on the website (a `kstrl://` link back into the app). Plan and daily usage come from your server. See `docs/website-login.md` for the website and server contract.
+- **Chat history** is saved and restored on restart, and Kestrel remembers the earlier conversation.
+- **Tab autocomplete:** grey inline suggestions from Colossus 2, accepted with Tab (Settings → Appearance).
+- **Source Control panel** (`Ctrl+Shift+G`): changes, diffs, stage/unstage, discard, an AI-written commit message, commit, push and pull.
+- **Screenshots in chat:** paste (`Ctrl+V`), drag in, or use + → Image.
+- **Project rules:** `.kstrl/rules.md` in a project is followed in every chat (Settings → Agents → Edit Project Rules).
+- **Codebase search:** Kestrel's `codebase_search` tool ranks the most relevant code for a description.
+- **Web access:** Kestrel can search the web and read pages, asking first by default (Settings → Agents → Web Access).
+- **Running agents:** several chats can work at once; the sidebar lists the ones running, with a stop button.
+- **Crash log** in the logs folder, plus opt-in crash reports.
+- **Mac version:** `KSTRL-mac-arm64.dmg` (Apple Silicon) and `KSTRL-mac-x64.dmg` (Intel). It isn't signed with an Apple Developer ID yet, so open it the first time with right-click → Open, and it doesn't auto-update.
+- **Code signing for Windows:** add Azure Trusted Signing settings to the repo (see the top of `.github/workflows/build-windows.yml`) and builds are signed automatically.
+
 ## Daily usage
 
 Each request costs credits = (input tokens + 3 × output tokens) / 1000 × model weight × mode weight. Free gets 2,500 credits a day and KSTRL MAX gets 20× that (50,000). When they run out, chat is paused until midnight (local time). Weights live in `electron/models.cjs`:

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('kstrl', {
     discard: invoke('git:discard'), commit: invoke('git:commit'), push: invoke('git:push'), pull: invoke('git:pull'), init: invoke('git:init'), message: invoke('git:message'),
   },
   auth: { login: invoke('auth:login'), logout: invoke('auth:logout'), refresh: invoke('auth:refresh') },
+  log: { error: invoke('log:error'), openFolder: invoke('log:openFolder') },
   chats: { load: invoke('chats:load'), save: invoke('chats:save') },
   fs: {
     readDir: invoke('fs:readDir'), readFile: invoke('fs:readFile'), writeFile: invoke('fs:writeFile'),

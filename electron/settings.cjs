@@ -48,6 +48,7 @@ const DEFAULTS = {
   completionSound: false,
   trayIcon: false,
   autoUpdate: true,
+  crashReports: false, // opt-in: send crash reports to the KSTRL API
   // Stats
   usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
   plan: 'free', // free | max (local fallback; a logged-in account's plan comes from the server)
