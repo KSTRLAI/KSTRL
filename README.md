@@ -4,7 +4,6 @@
 
 | Model | Best for |
 | --- | --- |
-| **Colossus 2** | Quick edits, explanations, everyday questions |
 | **Colossus 2.1** | Balanced speed and quality for everyday coding. Plan mode always uses it. |
 | **Colossus 2.2** | Stronger coding and reasoning for larger tasks |
 | **Colossus 3** (Flagship) | Maximum capability for the hardest work |
@@ -23,7 +22,7 @@ Modes: **Build** (edits files and runs commands), **Plan** (brainstorm and plan,
 
 - **Log in with kstrlsi:** one click if you're already logged in on the website (a `kstrl://` link back into the app). Plan and daily usage come from your server. See `docs/website-login.md` for the website and server contract.
 - **Chat history** is saved and restored on restart, and Kestrel remembers the earlier conversation.
-- **Tab autocomplete:** grey inline suggestions from Colossus 2, accepted with Tab (Settings → Appearance).
+- **Tab autocomplete:** grey inline suggestions from Colossus 2.1, accepted with Tab (Settings → Appearance).
 - **Source Control panel** (`Ctrl+Shift+G`): changes, diffs, stage/unstage, discard, an AI-written commit message, commit, push and pull.
 - **Screenshots in chat:** paste (`Ctrl+V`), drag in, or use + → Image.
 - **Project rules:** `.kstrl/rules.md` in a project is followed in every chat (Settings → Agents → Edit Project Rules).
@@ -39,7 +38,7 @@ Modes: **Build** (edits files and runs commands), **Plan** (brainstorm and plan,
 Each request costs credits = (input tokens + 3 × output tokens) / 1000 × model weight × mode weight. Free gets 2,500 credits a day and KSTRL MAX gets 20× that (50,000). When they run out, chat is paused until midnight (local time). Weights live in `electron/models.cjs`:
 
 - Modes: Build 1×, Plan 0.5×, Ask 0.35×
-- Models: Colossus 2 0.5×, 2.1 1×, 2.2 1.6×, UltraCode 2.5×, Colossus 3 4×
+- Models: Colossus 2.1 1×, 2.2 1.6×, UltraCode 2.5×, Colossus 3 4×
 
 The plan is stored in the local settings file and the renderer can't change it. There is no billing yet, so the Upgrade buttons open the website.
 
@@ -62,14 +61,16 @@ The plan is stored in the local settings file and the renderer can't change it. 
 ## Setup
 
 1. Install and launch KSTRL.
-2. In the **Getting Started** card, click **Connect Unsloth Server**. You can also open Settings (`Ctrl+,`) → **Model Server**.
-3. Enter your Unsloth server's URL, plus an API key if your server needs one, then click **Test connection**.
-4. Choose which server model powers each Colossus model. "Server default" uses the first model the server lists.
+2. **Sign up** on the screen that opens (or **Log In** from the account menu). Creating an account on your KSTRL server (e.g. Launch at `http://127.0.0.1:8000`) sets up your API key automatically.
+3. Or connect a model server yourself in Settings (`Ctrl+,`) → **Model Server**:
+   - **OpenAI-compatible**: any endpoint such as Launch, Unsloth, vLLM, LM Studio, Ollama or OpenRouter. Enter its URL (plus a key if it needs one) and click **Test connection**.
+   - **Grok**: paste an xAI API key from console.x.ai.
+4. Choose which model powers each Colossus model.
 5. Start a chat on the Agents home screen, or open the **IDE** (`Ctrl+E`).
 
 KSTRL talks to the server's OpenAI-compatible API (`/v1/models`, `/v1/chat/completions`) with streaming and tool calling. It also understands `<think>` reasoning blocks and `reasoning_content`, and shows both as Kestrel's thought process.
 
-You can also use the Anthropic API instead: Settings → Model Server → **Anthropic API**.
+You can also use the Anthropic API instead: Settings → Model Server → **Anthropic**.
 
 ## Develop
 

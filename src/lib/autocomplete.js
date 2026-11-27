@@ -1,4 +1,4 @@
-// Tab autocomplete: grey inline suggestions from Colossus 2, accepted with Tab.
+// Tab autocomplete: grey inline suggestions from Colossus 2.1, accepted with Tab.
 import { monaco } from './monaco.js';
 
 const api = window.kstrl;

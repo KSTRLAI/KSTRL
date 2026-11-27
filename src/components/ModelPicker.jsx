@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Check, ChevronRight, ChevronLeft, Info, Wand2, SlidersHorizontal } from 'lucide-react';
 
 // Flagship first, like the reference dropdown.
-const ORDER = ['colossus-3', 'colossus-2.2', 'colossus-2.1', 'colossus-2'];
+const ORDER = ['colossus-3', 'colossus-2.2', 'colossus-2.1'];
 const NOTE = { 'colossus-3': 'Flagship' };
 
 export const enabledModels = (info, settings) => {
@@ -29,10 +29,10 @@ export function resolveModel(info, settings, { text = '', contextCount = 0, mode
   const pick = (...ids) => ids.map((id) => list.find((m) => m.id === id)).find(Boolean) || list[0];
   const effort = settings.effort;
   let m;
-  if (effort === 'max' || contextCount > 2 || text.length >= 1200) m = pick('colossus-3', 'colossus-2.2', 'colossus-2.1', 'colossus-2');
-  else if (effort === 'high' || contextCount > 1 || text.length >= 600) m = pick('colossus-2.2', 'colossus-3', 'colossus-2.1', 'colossus-2');
-  else if (mode === 'build' || contextCount > 0 || text.length >= 220) m = pick('colossus-2.1', 'colossus-2.2', 'colossus-3', 'colossus-2');
-  else m = pick('colossus-2', 'colossus-2.1', 'colossus-2.2', 'colossus-3');
+  if (effort === 'max' || contextCount > 2 || text.length >= 1200) m = pick('colossus-3', 'colossus-2.2', 'colossus-2.1');
+  else if (effort === 'high' || contextCount > 1 || text.length >= 600) m = pick('colossus-2.2', 'colossus-3', 'colossus-2.1');
+  else if (mode === 'build' || contextCount > 0 || text.length >= 220) m = pick('colossus-2.1', 'colossus-2.2', 'colossus-3');
+  else m = pick('colossus-2.1', 'colossus-2.2', 'colossus-3');
   return { model: m, auto: true };
 }
 

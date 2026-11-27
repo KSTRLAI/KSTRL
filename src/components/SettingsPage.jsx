@@ -57,7 +57,8 @@ function UpdateControl() {
 }
 
 function ServerSettings({ info, settings, onChange }) {
-  const provider = settings.provider === 'anthropic' ? 'anthropic' : 'unsloth';
+  const provider = ['anthropic', 'grok'].includes(settings.provider) ? settings.provider : 'unsloth';
+  const [gkey, setGkey] = useState('');
   const [url, setUrl] = useState(settings.unslothURL || '');
   const [key, setKey] = useState('');
   const [akey, setAkey] = useState('');
@@ -70,7 +71,7 @@ function ServerSettings({ info, settings, onChange }) {
     setKey('');
     setTest(await api.server.test({}));
   };
-  useEffect(() => { if (provider === 'unsloth' && (settings.unslothURL || settings.usingBuiltinServer)) api.server.test({}).then(setTest); }, [provider]); // eslint-disable-line
+  useEffect(() => { setTest(null); if ((provider === 'unsloth' && (settings.unslothURL || settings.usingBuiltinServer)) || (provider === 'grok' && settings.hasGrokKey)) api.server.test({}).then(setTest); }, [provider]); // eslint-disable-line
   const serverModels = test?.ok ? test.models : [];
 
   return (
@@ -78,16 +79,45 @@ function ServerSettings({ info, settings, onChange }) {
       <div className="set-row">
         <div className="set-txt stack"><div className="t">Model server</div><div className="d">Where the Colossus models run.</div></div>
         <div className="seg sm">
-          <button className={provider === 'unsloth' ? 'on' : ''} onClick={() => onChange({ provider: 'unsloth' })}><Server size={13} /> Unsloth</button>
+          <button className={provider === 'unsloth' ? 'on' : ''} onClick={() => onChange({ provider: 'unsloth' })}><Server size={13} /> OpenAI-compatible</button>
+          <button className={provider === 'grok' ? 'on' : ''} onClick={() => onChange({ provider: 'grok' })}><Zap size={13} /> Grok</button>
           <button className={provider === 'anthropic' ? 'on' : ''} onClick={() => onChange({ provider: 'anthropic' })}><Cloud size={13} /> Anthropic</button>
         </div>
       </div>
-      {provider === 'unsloth' ? (
+      {provider === 'grok' ? (
+        <>
+          <div className="set-row col">
+            <div className="set-txt stack"><div className="t">xAI API key</div><div className="d">{settings.hasGrokKey ? <span className="status-ok"><CircleCheck size={13} /> A key is configured</span> : <>Get one at <button className="link" onClick={() => api.shell.openExternal('https://console.x.ai')}>console.x.ai</button>. Stored encrypted on this PC; Kestrel talks to api.x.ai directly.</>}</div></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="input" type="password" placeholder={settings.hasGrokKey ? '•••••••••••• (saved — paste to replace)' : 'xai-…'} value={gkey} onChange={(e) => setGkey(e.target.value)} />
+              <button className="btn light" disabled={!gkey.trim()} onClick={async () => { await onChange({ grokKey: gkey.trim() }); setGkey(''); setTest({ busy: true }); setTest(await api.server.test({})); }}><KeyRound size={13} /> Save</button>
+              {settings.hasGrokKey && <button className="btn" onClick={() => { onChange({ grokKey: '' }); setTest(null); }}>Remove</button>}
+            </div>
+          </div>
+          <div className="set-row">
+            <div className="set-txt">{test && !test.busy ? (test.ok ? <span className="status-ok"><CircleCheck size={13} /> Connected to xAI · {test.models.length} models</span> : <span className="set-error">{test.error}</span>) : <div className="d">Save a key to load the Grok models.</div>}</div>
+            <button className="btn light" disabled={!settings.hasGrokKey || test?.busy} onClick={async () => { setTest({ busy: true }); setTest(await api.server.test({})); }}>{test?.busy ? <Loader2 size={13} className="spin" /> : <PlugZap size={13} />} Test connection</button>
+          </div>
+          {models.map((m) => (
+            <div key={m.id} className="set-row">
+              <div className="set-txt stack"><div className="t">{m.name}</div><div className="d">{m.hidden ? 'Grok model used when effort is set to UltraCode' : `Grok model for ${m.name}`}</div></div>
+              {serverModels.length ? (
+                <select className="input set-select mono" value={settings.grokModels?.[m.id] || ''} onChange={(e) => onChange({ grokModels: { ...settings.grokModels, [m.id]: e.target.value || undefined } })}>
+                  <option value="">Default ({settings.grokDefault})</option>
+                  {serverModels.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              ) : (
+                <input className="input set-select mono" placeholder={settings.grokDefault} defaultValue={settings.grokModels?.[m.id] || ''} onBlur={(e) => onChange({ grokModels: { ...settings.grokModels, [m.id]: e.target.value.trim() || undefined } })} />
+              )}
+            </div>
+          ))}
+        </>
+      ) : provider === 'unsloth' ? (
         <>
           {settings.usingBuiltinServer && <div className="set-row"><div className="set-txt stack"><div className="t">Built-in server</div><div className="d">This copy of KSTRL came pre-connected. Enter a URL below to use your own server instead.</div></div><span className="status-ok"><CircleCheck size={13} /> Active</span></div>}
           <div className="set-row col">
-            <div className="set-txt stack"><div className="t">Server URL</div><div className="d">Your Unsloth server's OpenAI-compatible address. "/v1" is added automatically.</div></div>
-            <input className="input mono" placeholder="http://192.168.1.50:8000" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => url.trim() !== (settings.unslothURL || '') && onChange({ unslothURL: url.trim() })} onKeyDown={(e) => e.key === 'Enter' && runTest()} />
+            <div className="set-txt stack"><div className="t">Server URL</div><div className="d">Any OpenAI-compatible endpoint: Launch, Unsloth, vLLM, LM Studio, Ollama, OpenRouter… "/v1" is added automatically.</div></div>
+            <input className="input mono" placeholder="http://127.0.0.1:8000" value={url} onChange={(e) => setUrl(e.target.value)} onBlur={() => url.trim() !== (settings.unslothURL || '') && onChange({ unslothURL: url.trim() })} onKeyDown={(e) => e.key === 'Enter' && runTest()} />
           </div>
           <div className="set-row col">
             <div className="set-txt stack"><div className="t">API key <span className="opt-l">optional</span></div><div className="d">Stored encrypted on this PC.</div></div>
@@ -189,7 +219,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
     ] },
     { tab: 'appearance', title: 'Editor', rows: [
       { t: 'Font Size', d: 'Code editor font size (Ctrl+= / Ctrl+-)', c: <Stepper value={settings.fontSize || 14} min={10} max={28} onChange={set('fontSize')} /> },
-      { t: 'Tab Autocomplete', d: 'Grey suggestions as you type, accepted with Tab. Uses Colossus 2 and a small amount of usage.', c: <Toggle on={settings.tabAutocomplete !== false} onChange={set('tabAutocomplete')} /> },
+      { t: 'Tab Autocomplete', d: 'Grey suggestions as you type, accepted with Tab. Uses Colossus 2.1 and a small amount of usage.', c: <Toggle on={settings.tabAutocomplete !== false} onChange={set('tabAutocomplete')} /> },
       { t: 'Minimap', d: 'Show the code overview on the right of the editor', c: <Toggle on={settings.minimap !== false} onChange={set('minimap')} /> },
       { t: 'Word Wrap', d: 'Wrap long lines in the editor', c: <Toggle on={!!settings.wordWrap} onChange={set('wordWrap')} /> },
     ] },
@@ -219,7 +249,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       const on = enabled.includes(m.id);
       return { t: m.name, d: m.description, icon: <I size={14} />, c: <Toggle on={on} onChange={(v) => { const next = v ? [...new Set([...enabled, m.id])] : enabled.filter((x) => x !== m.id); if (next.length) onChange({ enabledModels: next }); }} /> };
     }) },
-    { tab: 'models', title: 'Model Server', custom: 'server', rows: [{ t: 'Model server Unsloth URL API key Anthropic connection', d: '' }] },
+    { tab: 'models', title: 'Model Server', custom: 'server', rows: [{ t: 'Model server OpenAI-compatible endpoint URL API key Grok xAI Anthropic connection', d: '' }] },
 
     { tab: 'keys', title: null, rows: commands.filter((c) => c.kbd).map((c) => ({ t: c.label, d: '', c: <span className="kbd-chip mono">{fmtKbd(c.kbd)}</span> })) },
   ];
@@ -313,7 +343,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
         <div className="set-inner">
           {!query && tab === 'general' && !settings.configured && (
             <div className="set-banner glass">
-              <div><div className="t">Connect your model server</div><div className="d">Kestrel needs your Unsloth server to run the Colossus models.</div></div>
+              <div><div className="t">Connect your model server</div><div className="d">Log in, or connect an OpenAI-compatible server or Grok, to run the Colossus models.</div></div>
               <button className="btn" onClick={() => setTab('models')}>Open Models</button>
             </div>
           )}
@@ -341,7 +371,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
               <img src="./icon.png" alt="" />
               <div className="mono" style={{ letterSpacing: '.4em', fontSize: 18, paddingLeft: '.4em' }}>KSTRL</div>
               <div className="set-note">Version {info?.version} · {info?.platform === 'win32' ? 'Windows' : info?.platform}</div>
-              <p>An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by the Colossus models — Colossus 2, 2.1, 2.2 and the flagship Colossus 3.</p>
+              <p>An AI-native coding environment. Kestrel reads your project, edits files and runs commands — powered by the Colossus models — Colossus 2.1, 2.2 and the flagship Colossus 3.</p>
               <div style={{ display: 'flex', gap: 8 }}>
                 <UpdateControl />
                 <button className="btn" onClick={() => api.shell.openExternal(SITE)}>kstrlsi <ExternalLink size={12} /></button>

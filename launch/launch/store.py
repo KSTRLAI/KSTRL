@@ -12,7 +12,7 @@ from pathlib import Path
 
 HOME = Path.home() / ".launch"
 LIMITS = {"free": 2500.0, "max": 50000.0}
-MODEL_WEIGHT = {"colossus-2": 0.5, "colossus-2.1": 1, "colossus-2.2": 1.6, "colossus-2.2-uc": 2.5, "colossus-3": 4}
+MODEL_WEIGHT = {"colossus-2.1": 1, "colossus-2.2": 1.6, "colossus-2.2-uc": 2.5, "colossus-3": 4}
 MODE_WEIGHT = {"build": 1, "plan": 0.5, "ask": 0.35, "complete": 0.15, "commit": 0.35}
 
 

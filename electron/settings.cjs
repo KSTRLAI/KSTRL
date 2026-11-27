@@ -12,7 +12,10 @@ let BUILTIN = {};
 try { BUILTIN = JSON.parse(fs.readFileSync(path.join(__dirname, 'build-config.json'), 'utf8')) || {}; } catch {}
 
 const DEFAULTS = {
-  provider: 'unsloth', // 'unsloth' (OpenAI-compatible server) | 'anthropic'
+  provider: 'unsloth', // 'unsloth' (any OpenAI-compatible server, e.g. Launch) | 'grok' (xAI) | 'anthropic'
+  // Grok (xAI)
+  grokKeyEnc: null,
+  grokModels: {}, // { [colossusId]: xAI model id }
   // Unsloth server
   unslothURL: '',
   unslothKeyEnc: null,
@@ -71,6 +74,9 @@ function load() {
   catch { cache = { ...DEFAULTS }; }
   // Colossus 2.3 was retired and 2.2 UC is now reached through the UltraCode effort.
   if (cache.model === 'colossus-2.3') cache.model = 'colossus-3';
+  // Colossus 2 was retired in 1.8.0: its jobs (and autocomplete) moved to Colossus 2.1.
+  if (cache.model === 'colossus-2') cache.model = 'colossus-2.1';
+  for (const a of cache.automations || []) if (a.model === 'colossus-2') a.model = 'colossus-2.1';
   if (cache.model === 'colossus-2.2-uc') { cache.model = 'colossus-3'; cache.effort = 'ultracode'; }
   if (cache.lastManualModel && !PICKABLE.includes(cache.lastManualModel)) cache.lastManualModel = 'colossus-3';
   if (Array.isArray(cache.enabledModels)) cache.enabledModels = cache.enabledModels.filter((id) => PICKABLE.includes(id));
@@ -110,6 +116,7 @@ function update(patch) {
   const next = { ...patch };
   if ('apiKey' in next) { cache.apiKeyEnc = seal(next.apiKey); delete next.apiKey; }
   if ('unslothKey' in next) { cache.unslothKeyEnc = seal(next.unslothKey); delete next.unslothKey; }
+  if ('grokKey' in next) { cache.grokKeyEnc = seal(next.grokKey); delete next.grokKey; }
   Object.assign(cache, next);
   save();
   return publicView();
@@ -130,6 +137,15 @@ function getUnsloth() {
     key: process.env.KSTRL_UNSLOTH_KEY || unseal(cache.unslothKeyEnc) || '',
     builtin: !own && !!BUILTIN.unslothURL,
   };
+}
+
+// The OpenAI-style backend Kestrel chats with: the user's OpenAI-compatible server, or Grok (xAI).
+const GROK_URL = 'https://api.x.ai/v1';
+const GROK_DEFAULT = 'grok-code-fast-1';
+function getOpenAI() {
+  load();
+  if (cache.provider === 'grok') return { url: GROK_URL, key: process.env.XAI_API_KEY || unseal(cache.grokKeyEnc) || '', grok: true };
+  return getUnsloth();
 }
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -181,21 +197,23 @@ function recordUsage(modelId, { input = 0, output = 0 } = {}, mode = 'build') {
 function backendFor(modelId) {
   load();
   const m = MODELS.find((x) => x.id === modelId) || MODELS[MODELS.length - 1];
-  return { ...m, backend: cache.backendOverrides[m.id] || m.backend, serverModel: cache.unslothModels[m.id] || '' };
+  const serverModel = cache.provider === 'grok' ? ((cache.grokModels || {})[m.id] || GROK_DEFAULT) : (cache.unslothModels[m.id] || '');
+  return { ...m, backend: cache.backendOverrides[m.id] || m.backend, serverModel };
 }
 
 function isConfigured() {
   load();
   if (cache.provider === 'anthropic') return !!getApiKey();
+  if (cache.provider === 'grok') return !!getOpenAI().key;
   const u = getUnsloth();
   return !!u.url && !!u.key; // logged in (or a pasted API key)
 }
 
 function publicView() {
   load();
-  const { apiKeyEnc, unslothKeyEnc, daily: _d, ...rest } = cache;
+  const { apiKeyEnc, unslothKeyEnc, grokKeyEnc, daily: _d, ...rest } = cache;
   const un = getUnsloth();
-  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), loggedIn: !!(unseal(cache.unslothKeyEnc) && cache.account && !cache.account.expired && !cache.account.auto), autoKey: !!(cache.account && cache.account.auto), userName: require('node:os').userInfo().username };
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), hasGrokKey: !!unseal(cache.grokKeyEnc), grokDefault: GROK_DEFAULT, builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), loggedIn: !!(unseal(cache.unslothKeyEnc) && cache.account && !cache.account.expired && !cache.account.auto), autoKey: !!(cache.account && cache.account.auto), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {
@@ -205,4 +223,4 @@ function addRecent(folder) {
   save();
 }
 
-module.exports = { load, update, getApiKey, getUnsloth, backendFor, publicView, addRecent, isConfigured, recordUsage, hasUsageLeft, usageView };
+module.exports = { load, update, getApiKey, getUnsloth, getOpenAI, backendFor, publicView, addRecent, isConfigured, recordUsage, hasUsageLeft, usageView };

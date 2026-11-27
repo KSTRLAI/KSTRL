@@ -66,7 +66,6 @@ credits = (prompt_tokens + 3 × completion_tokens) / 1000 × model weight × mod
 
 | Model (server model the app asks for) | weight |
 |---|---|
-| Colossus 2 | 0.5 |
 | Colossus 2.1 | 1 |
 | Colossus 2.2 | 1.6 |
 | Colossus 2.2 UC (UltraCode) | 2.5 |

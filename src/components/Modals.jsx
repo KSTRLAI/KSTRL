@@ -125,7 +125,7 @@ export function AuthScreen({ settings, initial = 'login', onClose, onDone }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
-  const [url, setUrl] = useState('');
+  const [url, setUrl] = useState('http://127.0.0.1:8000'); // Launch's default address on this PC
   const [needsUrl, setNeedsUrl] = useState(!settings.unslothURL && !settings.builtinServer);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -161,7 +161,7 @@ export function AuthScreen({ settings, initial = 'login', onClose, onDone }) {
     onClose();
   };
   const switchTab = (t) => { setTab(t); setError(''); setPaste(false); };
-  const urlField = needsUrl && <label className="af"><span>Server address</span><input className="input mono" placeholder="https://api.example.com" value={url} onChange={(e) => setUrl(e.target.value)} /></label>;
+  const urlField = needsUrl && <label className="af"><span>KSTRL server address</span><input className="input mono" placeholder="http://127.0.0.1:8000" value={url} onChange={(e) => setUrl(e.target.value)} /><small className="af-hint">Your account and API key are created on this server. Launch runs on http://127.0.0.1:8000 by default.</small></label>;
 
   return (
     <div className="auth-screen">

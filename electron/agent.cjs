@@ -1,5 +1,5 @@
 // Kestrel agent: a streaming tool-use loop over either
-//  • an Unsloth server (OpenAI-compatible /v1/chat/completions), or
+//  • an OpenAI-compatible server (Launch, Unsloth, vLLM… — /v1/chat/completions) or Grok (xAI), or
 //  • the Anthropic Messages API.
 // Every file/command action is confined to the open workspace.
 const Anthropic = require('@anthropic-ai/sdk').default;
@@ -196,8 +196,8 @@ function describeError(err) {
     if (err.status === 0) return err.message;
     if (err.status === 429 && /usage_limit|usage limit|quota/i.test(err.message)) return LIMIT_MSG();
     if (err.status === 401 || err.status === 403) return 'Your login has expired or the API key was rejected. Click Log in to sign in again.';
-    if (err.status === 404) return `The Unsloth server could not find that model or endpoint. Check the model selection in Settings → Model Server. (${err.message})`;
-    return `Unsloth server error (${err.status}): ${err.message}`;
+    if (err.status === 404) return `The model server could not find that model or endpoint. Check the model selection in Settings → Model Server. (${err.message})`;
+    return `Model server error (${err.status}): ${err.message}`;
   }
   if (err instanceof Anthropic.AuthenticationError) return 'Your API key was rejected. Check it in Settings.';
   if (err instanceof Anthropic.PermissionDeniedError) return 'This API key does not have access to the selected model. Try another Colossus model or change its backend in Settings.';
@@ -349,7 +349,7 @@ class AgentManager {
     if (model.serverModel) return model.serverModel;
     if (this.defaultModelCache.has(unsloth.url)) return this.defaultModelCache.get(unsloth.url);
     const list = await oai.listModels({ baseURL: unsloth.url, apiKey: unsloth.key, signal });
-    if (!list.length) throw new oai.ProviderError(404, 'The Unsloth server did not list any models.');
+    if (!list.length) throw new oai.ProviderError(404, 'The model server did not list any models.');
     this.defaultModelCache.set(unsloth.url, list[0]);
     return list[0];
   }
@@ -407,7 +407,7 @@ class AgentManager {
       apiKey: unsloth.key,
       signal,
       body,
-      extraHeaders: { 'X-KSTRL-Mode': ctx.mode, 'X-KSTRL-Model': ctx.model.id },
+      extraHeaders: unsloth.grok ? {} : { 'X-KSTRL-Mode': ctx.mode, 'X-KSTRL-Model': ctx.model.id },
       onText: (delta) => this.emit(chatId, { type: 'text', runId, delta }),
       onThinking: (delta) => this.emit(chatId, { type: 'thinking', runId, delta }),
       onToolStart: (id, name) => this.emit(chatId, { type: 'tool_pending', runId, toolId: id, name }),
@@ -474,8 +474,8 @@ class AgentManager {
       if (!apiKey) { this.emit(chatId, { type: 'error', runId, message: 'No API key configured. Open Settings → Model Server to connect a model backend.' }); return done(); }
       client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
     } else {
-      unsloth = settings.getUnsloth();
-      if (!settings.isConfigured()) { this.emit(chatId, { type: 'error', runId, message: 'You\'re not logged in yet. Click Log in to connect KSTRL with your kstrlsi account.', connect: true }); return done(); }
+      unsloth = settings.getOpenAI();
+      if (!settings.isConfigured()) { this.emit(chatId, { type: 'error', runId, message: unsloth.grok ? 'Add your xAI API key in Settings → Model Server → Grok.' : 'You\'re not logged in yet. Click Log in to create a KSTRL account (it sets up your API key automatically).', connect: !unsloth.grok }); return done(); }
     }
 
     let chat = this.chats.get(chatId);
@@ -593,7 +593,7 @@ class AgentManager {
         if (msg.stop_reason === 'refusal') throw new Error('The model declined this edit.');
         out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       } else {
-        const unsloth = settings.getUnsloth();
+        const unsloth = settings.getOpenAI();
         if (!settings.isConfigured()) throw new Error('You\'re not logged in yet. Click Log in to connect KSTRL.');
         const r = await oai.streamChat({
           baseURL: unsloth.url, apiKey: unsloth.key,
@@ -622,10 +622,10 @@ class AgentManager {
       if (msg.usage) this.recordUsage(ctx, { input: msg.usage.input_tokens || 0, output: msg.usage.output_tokens || 0 });
       return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     }
-    const unsloth = settings.getUnsloth();
+    const unsloth = settings.getOpenAI();
     const r = await oai.streamChat({
       baseURL: unsloth.url, apiKey: unsloth.key, signal,
-      extraHeaders: { 'X-KSTRL-Mode': mode, 'X-KSTRL-Model': model.id },
+      extraHeaders: unsloth.grok ? {} : { 'X-KSTRL-Mode': mode, 'X-KSTRL-Model': model.id },
       body: { model: await this.serverModel(model, unsloth, signal), max_tokens: maxTokens, temperature: 0.2, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], stream_options: { include_usage: true } },
       onText: () => {}, onThinking: () => {}, onToolStart: () => {},
     });
@@ -633,14 +633,14 @@ class AgentManager {
     return r.text || '';
   }
 
-  // Tab autocomplete (Colossus 2). Cancelled when the user keeps typing.
+  // Tab autocomplete (Colossus 2.1). Cancelled when the user keeps typing.
   async complete({ id, prefix, suffix, language, path: filePath }) {
     const controller = new AbortController();
     this.completions.set(id, controller);
     try {
       const system = 'You are the inline code completion engine in a code editor. Reply with ONLY the text to insert at <CURSOR> — no explanations, no Markdown fences, no repetition of the code before or after the cursor. Prefer completing the current line or the next few lines (at most about 12 lines). If nothing useful fits, reply with an empty message.';
       const user = `File: ${filePath} (${language})\n<code>${prefix}<CURSOR>${suffix}</code>`;
-      let out = await this.quick({ system, user, modelId: 'colossus-2', mode: 'complete', maxTokens: 200, signal: controller.signal });
+      let out = await this.quick({ system, user, modelId: 'colossus-2.1', mode: 'complete', maxTokens: 200, signal: controller.signal });
       out = out.replace(/^\s*```[\w-]*\n?/, '').replace(/\n?```\s*$/, '').replace(/<\/?(code|CURSOR)>/g, '');
       // Drop any tail that just repeats what's already after the cursor.
       const next = suffix.trimStart().split('\n')[0].trim();
@@ -655,7 +655,7 @@ class AgentManager {
   cancelComplete(id) { this.completions.get(id)?.abort(); this.completions.delete(id); }
 
   async testServer({ url, key }) {
-    const unsloth = settings.getUnsloth();
+    const unsloth = settings.getOpenAI();
     const models = await oai.listModels({ baseURL: url ?? unsloth.url, apiKey: key ?? unsloth.key });
     this.defaultModelCache.clear();
     return { ok: true, url: oai.normalizeBase(url ?? unsloth.url), models };

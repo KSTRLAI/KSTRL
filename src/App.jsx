@@ -370,7 +370,7 @@ export default function App() {
     ...(info?.models || []).filter((m) => !m.hidden).map((m) => ({ id: 'model-' + m.id, label: `Kestrel: Use ${m.name} (${m.tag})`, run: () => updateSettings({ model: m.id }) })),
     ...(info?.efforts || []).map((e) => ({ id: 'effort-' + e.id, label: `Kestrel: Effort ${e.name}`, run: () => updateSettings({ effort: e.id }) })),
     { id: 'settings', label: 'Preferences: Open Settings', kbd: 'Ctrl+,', run: () => setSettingsOpen('general') },
-    { id: 'server', label: 'Preferences: Model Server (Unsloth)', run: () => setSettingsOpen('server') },
+    { id: 'server', label: 'Preferences: Model Server', run: () => setSettingsOpen('server') },
     { id: 'zoomin', label: 'View: Increase Editor Font Size', kbd: 'Ctrl+=', run: () => updateSettings({ fontSize: Math.min(28, settings.fontSize + 1) }) },
     { id: 'zoomout', label: 'View: Decrease Editor Font Size', kbd: 'Ctrl+-', run: () => updateSettings({ fontSize: Math.max(10, settings.fontSize - 1) }) },
     { id: 'about', label: 'Help: About KSTRL', run: () => setSettingsOpen('about') },

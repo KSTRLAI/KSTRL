@@ -2,15 +2,6 @@
 // (Settings → Models). Defaults map the line-up onto the Claude family via the Anthropic API.
 const MODELS = [
   {
-    id: 'colossus-2',
-    name: 'Colossus 2',
-    tag: 'Fast',
-    description: 'Quick edits, explanations and everyday questions.',
-    backend: 'claude-haiku-5-5',
-    fallback: false,
-    weight: 0.5,
-  },
-  {
     id: 'colossus-2.1',
     name: 'Colossus 2.1',
     tag: 'Balanced',
