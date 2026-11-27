@@ -165,6 +165,7 @@ class AgentManager {
     this.approvals = new Map();
     this.checkpoints = new Map();
     this.defaultModelCache = new Map(); // server url -> first model id
+    this.completions = new Map(); // autocomplete id -> AbortController
   }
 
   recordUsage(ctx, tokens) {
@@ -501,6 +502,50 @@ class AgentManager {
     if (fence) out = fence[1];
     return out;
   }
+
+  // One short, non-streaming-to-UI completion (autocomplete, commit messages). Returns text.
+  async quick({ system, user, modelId, mode, maxTokens = 256, signal }) {
+    const s = settings.load();
+    if (!settings.isConfigured() || !settings.hasUsageLeft()) return '';
+    const model = settings.backendFor(modelId);
+    const ctx = { model, mode };
+    if (s.provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: settings.getApiKey(), baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 0 });
+      const msg = await client.messages.create({ model: model.backend, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }, { signal });
+      if (msg.usage) this.recordUsage(ctx, { input: msg.usage.input_tokens || 0, output: msg.usage.output_tokens || 0 });
+      return msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    }
+    const unsloth = settings.getUnsloth();
+    const r = await oai.streamChat({
+      baseURL: unsloth.url, apiKey: unsloth.key, signal,
+      extraHeaders: { 'X-KSTRL-Mode': mode, 'X-KSTRL-Model': model.id },
+      body: { model: await this.serverModel(model, unsloth, signal), max_tokens: maxTokens, temperature: 0.2, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], stream_options: { include_usage: true } },
+      onText: () => {}, onThinking: () => {}, onToolStart: () => {},
+    });
+    this.recordUsage(ctx, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
+    return r.text || '';
+  }
+
+  // Tab autocomplete (Colossus 2). Cancelled when the user keeps typing.
+  async complete({ id, prefix, suffix, language, path: filePath }) {
+    const controller = new AbortController();
+    this.completions.set(id, controller);
+    try {
+      const system = 'You are the inline code completion engine in a code editor. Reply with ONLY the text to insert at <CURSOR> — no explanations, no Markdown fences, no repetition of the code before or after the cursor. Prefer completing the current line or the next few lines (at most about 12 lines). If nothing useful fits, reply with an empty message.';
+      const user = `File: ${filePath} (${language})\n<code>${prefix}<CURSOR>${suffix}</code>`;
+      let out = await this.quick({ system, user, modelId: 'colossus-2', mode: 'complete', maxTokens: 200, signal: controller.signal });
+      out = out.replace(/^\s*```[\w-]*\n?/, '').replace(/\n?```\s*$/, '').replace(/<\/?(code|CURSOR)>/g, '');
+      // Drop any tail that just repeats what's already after the cursor.
+      const next = suffix.trimStart().split('\n')[0].trim();
+      if (next && out.trimEnd().endsWith(next)) out = out.trimEnd().slice(0, -next.length);
+      const lines = out.split('\n');
+      if (lines.length > 12) out = lines.slice(0, 12).join('\n');
+      return out.trim() ? out.replace(/\s+$/, '') : '';
+    } catch { return ''; }
+    finally { this.completions.delete(id); }
+  }
+
+  cancelComplete(id) { this.completions.get(id)?.abort(); this.completions.delete(id); }
 
   async testServer({ url, key }) {
     const unsloth = settings.getUnsloth();

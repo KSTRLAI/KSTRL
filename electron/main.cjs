@@ -222,6 +222,8 @@ handle('agent:reset', (chatId) => agent.reset(chatId));
 handle('agent:approve', (id, ok) => agent.resolveApproval(id, ok));
 handle('agent:revert', (runId) => agent.revert(runId));
 handle('agent:inlineEdit', (opts) => agent.inlineEdit(opts));
+handle('agent:complete', (opts) => agent.complete(opts || {}));
+handle('agent:cancelComplete', (id) => agent.cancelComplete(id));
 handle('server:test', async (opts) => {
   try { return await agent.testServer(opts || {}); }
   catch (e) { return { ok: false, error: String(e.message || e) }; }

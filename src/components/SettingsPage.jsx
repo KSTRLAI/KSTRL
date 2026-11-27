@@ -187,6 +187,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
     ] },
     { tab: 'appearance', title: 'Editor', rows: [
       { t: 'Font Size', d: 'Code editor font size (Ctrl+= / Ctrl+-)', c: <Stepper value={settings.fontSize || 14} min={10} max={28} onChange={set('fontSize')} /> },
+      { t: 'Tab Autocomplete', d: 'Grey suggestions as you type, accepted with Tab. Uses Colossus 2 and a small amount of usage.', c: <Toggle on={settings.tabAutocomplete !== false} onChange={set('tabAutocomplete')} /> },
       { t: 'Minimap', d: 'Show the code overview on the right of the editor', c: <Toggle on={settings.minimap !== false} onChange={set('minimap')} /> },
       { t: 'Word Wrap', d: 'Wrap long lines in the editor', c: <Toggle on={!!settings.wordWrap} onChange={set('wordWrap')} /> },
     ] },

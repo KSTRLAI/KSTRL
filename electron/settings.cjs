@@ -1,7 +1,7 @@
 const { app, safeStorage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { MODELS, MODES, PLANS } = require('./models.cjs');
+const { MODELS, MODES, PLANS, EXTRA_WEIGHTS } = require('./models.cjs');
 
 const file = () => path.join(app.getPath('userData'), 'kstrl-settings.json');
 
@@ -38,6 +38,7 @@ const DEFAULTS = {
   fontSize: 14,
   uiScale: 100,
   minimap: true,
+  tabAutocomplete: true,
   wordWrap: false,
   reduceTransparency: false,
   showTips: true,
@@ -154,8 +155,8 @@ const hasUsageLeft = () => usageView().left > 0;
 // Credits for one model call (see models.cjs for the formula).
 function creditsFor(modelId, mode, { input = 0, output = 0 }) {
   const m = MODELS.find((x) => x.id === modelId);
-  const md = MODES.find((x) => x.id === mode) || MODES[0];
-  return ((input + 3 * output) / 1000) * (m?.weight ?? 1) * md.weight;
+  const w = MODES.find((x) => x.id === mode)?.weight ?? EXTRA_WEIGHTS[mode] ?? 1;
+  return ((input + 3 * output) / 1000) * (m?.weight ?? 1) * w;
 }
 
 function recordUsage(modelId, { input = 0, output = 0 } = {}, mode = 'build') {

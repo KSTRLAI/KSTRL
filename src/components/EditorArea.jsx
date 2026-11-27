@@ -50,6 +50,7 @@ const EditorArea = forwardRef(function EditorArea({ tabs, active, onActivate, on
       padding: { top: 8 },
       scrollBeyondLastLine: false,
       tabSize: 2,
+      inlineSuggest: { enabled: true, mode: 'subwordSmart' },
       model: null,
     });
     editorRef.current = editor;

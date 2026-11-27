@@ -15,6 +15,7 @@ import AutomationsPage, { useAutomationScheduler } from './components/Automation
 import { resolveModel, modelLabel, runLabel } from './components/ModelPicker.jsx';
 import { languageFor } from './lib/lang.js';
 import { mod } from './lib/keys.js';
+import { setAutocomplete } from './lib/autocomplete.js';
 import { useChats, chats as store, activeChat, getState as getChatState } from './lib/chatStore.js';
 const useChatsSnapshot = getChatState;
 const NO_AUTOMATIONS = { automations: [] };
@@ -127,6 +128,8 @@ export default function App() {
     // eslint-disable-next-line
   }), []);
   useEffect(() => { if (IDE) { document.title = 'KSTRL'; document.body.style.background = '#1b1b1b'; } }, []);
+
+  useEffect(() => { setAutocomplete(settings.tabAutocomplete); }, [settings.tabAutocomplete]);
 
   // Appearance
   useEffect(() => { document.documentElement.style.zoom = String((settings.uiScale || 100) / 100); }, [settings.uiScale]);

@@ -70,4 +70,7 @@ const PLANS = {
   max: { id: 'max', name: 'KSTRL MAX', daily: 50000 }, // 20× Free
 };
 
-module.exports = { MODELS, EFFORTS, MODES, PLANS };
+// Usage weights for things that aren't chat modes.
+const EXTRA_WEIGHTS = { complete: 0.15, commit: 0.35 };
+
+module.exports = { MODELS, EFFORTS, MODES, PLANS, EXTRA_WEIGHTS };
