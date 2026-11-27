@@ -1,0 +1,51 @@
+name: Build Launch
+
+# Builds Launch.exe (the local AI runner) and publishes it as a pre-release tagged launch-v<version>.
+# It's a pre-release on purpose: KSTRL's auto-updater follows the repo's "latest" release, which must stay a KSTRL version.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a pre-release with Launch.exe'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyinstaller
+      - name: Build Launch.exe
+        shell: bash
+        working-directory: launch
+        run: pyinstaller --onefile --console --name Launch --icon assets/icon.ico --add-data "launch;launch_src/launch" bootstrap.py -y
+      - name: Check it runs
+        shell: bash
+        working-directory: launch
+        run: |
+          v=$(python -c "import re;print(re.search(r'__version__ = \"(.+?)\"', open('launch/__init__.py').read()).group(1))")
+          b=$(python -c "import re;print(re.search(r'VERSION = \"(.+?)\"', open('bootstrap.py').read()).group(1))")
+          [ "$v" = "$b" ] || { echo "Version mismatch: launch/__init__.py=$v bootstrap.py=$b"; exit 1; }
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Launch
+          path: launch/dist/Launch.exe
+      - name: Publish pre-release
+        if: inputs.publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v=$(python -c "import re;print(re.search(r'__version__ = \"(.+?)\"', open('launch/launch/__init__.py').read()).group(1))")
+          tag="launch-v$v"
+          notes="Launch $v — local AI runner with the Launch engine. Download Launch.exe and double-click it. The first run sets up Python and PyTorch (about 2.5 GB with an NVIDIA GPU, 250 MB without)."
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --target "$GITHUB_SHA" --title "Launch $v" --notes "$notes" --prerelease --latest=false
+          gh release upload "$tag" launch/dist/Launch.exe --clobber
