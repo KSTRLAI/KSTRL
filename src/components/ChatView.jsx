@@ -4,7 +4,7 @@ import {
   ArrowUp, Square, Plus, X, ChevronDown, Check, Brain, FileCode2, Terminal as TermIcon, Search, FolderTree, FilePen,
   FilePlus2, Loader2, CircleAlert, CircleCheck, CircleX, Infinity as InfinityIcon, MessageCircleQuestion, AtSign, Zap,
   Gauge, Flame, Rocket, RotateCcw, Eye, History, PanelRightClose, Copy, Monitor, FolderPlus, FolderOpen, Folder,
-  Hammer, ListChecks, Bug, Compass, Code2,
+  Hammer, ListChecks, Bug, Compass, Code2, ScanSearch, Globe, ImageIcon,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { renderMarkdown } from '../lib/markdown.js';
@@ -25,8 +25,24 @@ export function ThinkingDots({ label = 'Thinking' }) {
   return <div className="thinking-dots" role="status"><span className="dots"><i /><i /><i /></span>{label && <span className="lbl">{label}</span>}</div>;
 }
 
-const TOOL_ICON = { list_files: FolderTree, read_file: FileCode2, search: Search, write_file: FilePlus2, edit_file: FilePen, run_command: TermIcon };
-const TOOL_VERB = { list_files: 'List', read_file: 'Read', search: 'Search', write_file: 'Write', edit_file: 'Edit', run_command: 'Run' };
+const TOOL_ICON = { list_files: FolderTree, read_file: FileCode2, search: Search, codebase_search: ScanSearch, write_file: FilePlus2, edit_file: FilePen, run_command: TermIcon, web_search: Globe, fetch_url: Globe };
+const TOOL_VERB = { list_files: 'List', read_file: 'Read', search: 'Search', codebase_search: 'Search code', write_file: 'Write', edit_file: 'Edit', run_command: 'Run', web_search: 'Web search', fetch_url: 'Read page' };
+
+// Pasted screenshots: shrink to at most 1568px (what vision models use) and keep a small thumbnail for the chat.
+async function imageItem(file) {
+  const url = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+  const draw = (max, type, q) => {
+    const k = Math.min(1, max / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL(type, q);
+  };
+  const type = file.type === 'image/png' && file.size < 1_500_000 ? 'image/png' : 'image/jpeg';
+  const full = draw(1568, type, 0.88);
+  return { kind: 'image', name: file.name && file.name !== 'image.png' ? file.name : 'Screenshot', mediaType: type, data: full.split(',')[1], thumb: draw(160, 'image/jpeg', 0.8), path: `image-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+}
 
 function lineDiffStat(before, after) {
   const a = before ? before.split('\n') : [];
@@ -41,7 +57,8 @@ function lineDiffStat(before, after) {
 function toolArg(name, input) {
   if (!input) return '';
   if (name === 'run_command') return input.command;
-  if (name === 'search') return input.query;
+  if (name === 'search' || name === 'codebase_search' || name === 'web_search') return input.query;
+  if (name === 'fetch_url') return input.url;
   if (name === 'list_files') return input.path || '.';
   return input.path || '';
 }
@@ -83,13 +100,13 @@ function ToolCard({ block, onApprove, onOpenDiff, onOpenFile }) {
       </div>
       {block.approval && (
         <div className="approval">
-          <div className="label" style={{ color: 'var(--accent)' }}>Run this command?</div>
-          <code>{block.input?.command}</code>
+          <div className="label" style={{ color: 'var(--accent)' }}>{block.approvalKind === 'web' ? 'Allow web access?' : 'Run this command?'}</div>
+          <code>{block.approvalText || block.input?.command}</code>
           <div className="row">
-            <button className="btn light" onClick={() => onApprove(block, true)}>Run</button>
+            <button className="btn light" onClick={() => onApprove(block, true)}>{block.approvalKind === 'web' ? 'Allow' : 'Run'}</button>
             <button className="btn" onClick={() => onApprove(block, false)}>Skip</button>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 11, color: 'var(--text-3)', alignSelf: 'center' }}>Auto-run can be enabled in Settings</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', alignSelf: 'center' }}>{block.approvalKind === 'web' ? 'Web access can be set to Always in Settings' : 'Auto-run can be enabled in Settings'}</span>
           </div>
         </div>
       )}
@@ -223,6 +240,15 @@ const ChatView = forwardRef(function ChatView(props, ref) {
   }, []);
 
   const focus = () => taRef.current?.focus();
+  const addImages = async (files) => {
+    for (const f of files.slice(0, 6)) {
+      try { addContext(await imageItem(f)); } catch { onToast?.('Could not read that image'); }
+    }
+  };
+  const onPaste = (e) => {
+    const imgs = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
+    if (imgs.length) { e.preventDefault(); addImages(imgs); }
+  };
   useImperativeHandle(ref, () => ({ focus, addContext, setInput: (t) => { setInput(t); setTimeout(focus, 0); } }));
 
   const send = async (override, modeOverride) => {
@@ -303,13 +329,18 @@ const ChatView = forwardRef(function ChatView(props, ref) {
   );
 
   const composer = (
-    <div className={'composer glass-strong' + (hero ? ' hero' : '')} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { const p = e.dataTransfer.getData('text/kstrl-path'); if (p) { e.preventDefault(); addContext({ kind: 'file', path: p }); } }}>
+    <div className={'composer glass-strong' + (hero ? ' hero' : '')} onDragOver={(e) => e.preventDefault()} onDrop={(e) => {
+      const p = e.dataTransfer.getData('text/kstrl-path');
+      if (p) { e.preventDefault(); addContext({ kind: 'file', path: p }); return; }
+      const imgs = [...(e.dataTransfer.files || [])].filter((f) => f.type.startsWith('image/'));
+      if (imgs.length) { e.preventDefault(); addImages(imgs); }
+    }}>
       {context.length > 0 && (
         <div className="ctx-pills" style={{ marginTop: 0 }}>
           {context.map((c, i) => (
-            <span className="pill" key={i} title={c.path}>
-              <FileCode2 size={11} />
-              <span>{c.path.split('/').pop()}{c.kind === 'selection' ? `:${c.startLine}-${c.endLine}` : ''}</span>
+            <span className={'pill' + (c.kind === 'image' ? ' img' : '')} key={i} title={c.kind === 'image' ? c.name : c.path}>
+              {c.kind === 'image' ? <img src={c.thumb} alt="" /> : <FileCode2 size={11} />}
+              <span>{c.kind === 'image' ? c.name : c.path.split('/').pop()}{c.kind === 'selection' ? `:${c.startLine}-${c.endLine}` : ''}</span>
               <button onClick={() => setContext((cs) => cs.filter((_, j) => j !== i))}><X size={10} /></button>
             </span>
           ))}
@@ -322,6 +353,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
         placeholder={outOfUsage ? 'Out of usage for today' : hero ? 'Plan, Build, / for modes, @ for context' : { build: 'Ask Kestrel to build, fix or change anything… (@ for context)', plan: 'Brainstorm and plan with Kestrel… (@ for context)', ask: 'Ask about your code… (@ for context)' }[mode]}
         onChange={onInput}
         onKeyDown={onKeyDown}
+        onPaste={onPaste}
       />
       <div className="row">
         <button className="plus-btn" title="Add context" onClick={openAt('add')}><Plus size={17} /></button>
@@ -381,6 +413,11 @@ const ChatView = forwardRef(function ChatView(props, ref) {
             <AtSign size={14} style={{ marginTop: 2, color: 'var(--accent)' }} />
             <div style={{ flex: 1 }}><div className="n">Files</div><div className="d">{workspace ? 'Attach files from this project' : 'Open a project first'}</div></div>
           </button>
+          <label className="opt" style={{ cursor: 'pointer' }}>
+            <ImageIcon size={14} style={{ marginTop: 2, color: 'var(--accent)' }} />
+            <div style={{ flex: 1 }}><div className="n">Image</div><div className="d">Attach a screenshot or design (or paste one with Ctrl+V)</div></div>
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => { setPop(null); addImages([...e.target.files]); e.target.value = ''; }} />
+          </label>
           <button className="opt" disabled={!activePath} style={!activePath ? { opacity: 0.45 } : null} onClick={() => { setPop(null); addContext({ kind: 'file', path: activePath }); }}>
             <FileCode2 size={14} style={{ marginTop: 2, color: 'var(--accent)' }} />
             <div style={{ flex: 1 }}><div className="n">Current file</div><div className="d">{activePath || 'No file open'}</div></div>
@@ -474,7 +511,9 @@ const ChatView = forwardRef(function ChatView(props, ref) {
           <div className="msg" key={i}>
             <div className="msg-role user">You</div>
             <div className="user-bubble glass-soft">{it.text}</div>
-            {it.context?.length > 0 && <div className="ctx-pills">{it.context.map((c, j) => <span className="pill" key={j}><FileCode2 size={11} /><span>{c.path.split('/').pop()}{c.kind === 'selection' ? `:${c.startLine}-${c.endLine}` : ''}</span></span>)}</div>}
+            {it.context?.length > 0 && <div className="ctx-pills">{it.context.map((c, j) => (c.kind === 'image'
+              ? <img key={j} className="msg-img" src={c.thumb} alt={c.name} title={c.name} />
+              : <span className="pill" key={j}><FileCode2 size={11} /><span>{c.path.split('/').pop()}{c.kind === 'selection' ? `:${c.startLine}-${c.endLine}` : ''}</span></span>))}</div>}
           </div>
         ) : (
           <div className="msg" key={i}>

@@ -144,7 +144,7 @@ function ServerSettings({ info, settings, onChange }) {
 
 const fmt = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n || 0));
 
-export default function SettingsPage({ info, settings, onChange, onBack, initialTab = 'general', commands = [], onLogin }) {
+export default function SettingsPage({ info, settings, onChange, onBack, initialTab = 'general', commands = [], onLogin, onProjectRules }) {
   const [tab, setTab] = useState(initialTab === 'server' ? 'models' : initialTab === 'kestrel' ? 'agents' : initialTab);
   const [q, setQ] = useState('');
   const models = info?.models || [];
@@ -204,8 +204,10 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
     ] },
     { tab: 'agents', title: 'Safety', rows: [
       { t: 'Auto-run Commands', d: 'Let Kestrel run terminal commands without asking first. Off by default.', c: <Toggle on={!!settings.autoRunCommands} onChange={set('autoRunCommands')} /> },
+      { t: 'Web Access', d: 'Let Kestrel search the web and read pages (docs, error messages)', c: <Select value={settings.webAccess || 'ask'} options={[['ask', 'Ask each time'], ['allow', 'Always allow'], ['off', 'Off']]} onChange={set('webAccess')} /> },
     ] },
     { tab: 'agents', title: 'Rules', rows: [
+      { t: 'Project Rules', d: 'Instructions for the open project, saved in .kstrl/rules.md and followed in every chat. Commit it to share with your team.', c: <button className="btn" onClick={() => onProjectRules?.()}>Edit Project Rules</button> },
       { t: 'Rules for Kestrel', d: 'Added to every conversation in Build, Plan and Ask mode', full: true, c: <textarea className="input" rows={6} placeholder={'e.g.\n- Use TypeScript and functional React components\n- Prefer pnpm\n- Write tests with Vitest'} defaultValue={settings.customInstructions} onBlur={(e) => onChange({ customInstructions: e.target.value })} /> },
     ] },
 

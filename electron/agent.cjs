@@ -8,6 +8,9 @@ const ws = require('./workspace.cjs');
 const settings = require('./settings.cjs');
 const { EFFORTS, MODES } = require('./models.cjs');
 const oai = require('./providers/openai-compat.cjs');
+const codeindex = require('./codeindex.cjs');
+const web = require('./web.cjs');
+const fs = require('node:fs');
 
 // Anthropic backends that accept the server-side refusal fallback parameter.
 const FALLBACK_OK = new Set(['claude-fable-5-2', 'claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
@@ -43,6 +46,25 @@ const READ_TOOLS = [
       },
       required: ['query'],
     },
+  },
+];
+
+READ_TOOLS.push({
+  name: 'codebase_search',
+  description: 'Find the code most relevant to a description, ranked by relevance (e.g. "where is the user logged in", "payment webhook handler"). Returns the best-matching code snippets with line numbers. Use it to orient yourself before reading files; use search for exact text.',
+  input_schema: { type: 'object', properties: { query: { type: 'string', description: 'What you are looking for, in words or identifiers.' }, limit: { type: 'integer', description: 'How many snippets (default 8, max 15).' } }, required: ['query'] },
+});
+
+const WEB_TOOLS = [
+  {
+    name: 'web_search',
+    description: 'Search the web. Returns titles, links and snippets. Use for documentation, error messages and library versions.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+  },
+  {
+    name: 'fetch_url',
+    description: 'Read a public web page (documentation, a GitHub issue, an API reference) as plain text.',
+    input_schema: { type: 'object', properties: { url: { type: 'string', description: 'An http(s) URL.' } }, required: ['url'] },
   },
 ];
 
@@ -113,6 +135,7 @@ function systemPrompt(model, mode, effort, provider) {
     'Format replies in Markdown. Use fenced code blocks with a language tag. Keep explanations tight and practical.',
     provider === 'unsloth' ? EFFORT_HINT[effort] : '',
     s.customInstructions ? `User's custom instructions:\n${s.customInstructions}` : '',
+    projectRules(),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -126,6 +149,18 @@ function LIMIT_MSG(short) {
 }
 
 // Rebuild a conversation from saved turns (after a restart the model context is gone).
+// Per-project rules: .kstrl/rules.md in the project (like Cursor rules), always followed.
+function projectRules() {
+  if (!ws.getRoot()) return '';
+  for (const p of ['.kstrl/rules.md', 'KSTRL.md']) {
+    try {
+      const t = fs.readFileSync(ws.resolveInside(p), 'utf8').trim();
+      if (t) return `Project rules from ${p} (always follow these):\n${t.slice(0, 20000)}`;
+    } catch {}
+  }
+  return '';
+}
+
 function seedMessages(history) {
   const msgs = [];
   for (const h of Array.isArray(history) ? history.slice(-40) : []) {
@@ -211,9 +246,9 @@ class AgentManager {
     cp.set(p, (await ws.fileExists(p)) ? await ws.readFile(p) : null);
   }
 
-  async askApproval(chatId, toolId, command) {
+  async askApproval(chatId, toolId, command, kind = 'command') {
     const id = `${chatId}:${toolId}`;
-    this.emit(chatId, { type: 'approval', id, toolId, command });
+    this.emit(chatId, { type: 'approval', id, toolId, command, kind });
     return new Promise((resolve) => this.approvals.set(id, resolve));
   }
 
@@ -230,6 +265,27 @@ class AgentManager {
         const end = Math.min(lines.length, input.end_line || lines.length);
         const body = lines.slice(start - 1, end).map((l, i) => `${String(start + i).padStart(5)}  ${l}`).join('\n');
         return { text: body || '(empty file)', summary: `${end - start + 1} lines` };
+      }
+      case 'codebase_search': {
+        const hits = await codeindex.search(input.query, Math.max(1, Math.min(15, input.limit || 8)));
+        if (!hits.length) return { text: 'Nothing relevant found. Try other words, or use search for exact text.', summary: '0 results' };
+        const text = hits.map((h) => `${h.path}:${h.start}-${h.end}\n` + h.text.split('\n').map((l, i) => `${String(h.start + i).padStart(5)}  ${l}`).join('\n')).join('\n\n');
+        return { text: text.slice(0, 40000), summary: `${hits.length} results` };
+      }
+      case 'web_search':
+      case 'fetch_url': {
+        const access = settings.load().webAccess || 'ask';
+        if (access === 'off') return { text: 'Web access is turned off in Settings.', summary: 'off', declined: true };
+        if (access === 'ask') {
+          const ok = await this.askApproval(chatId, toolId, name === 'web_search' ? `Search the web for “${input.query}”` : `Open ${input.url}`, 'web');
+          if (!ok) return { text: 'The user declined web access for this request.', summary: 'declined', declined: true };
+        }
+        if (name === 'web_search') {
+          const results = await web.search(input.query);
+          return { text: results.length ? results.map((x, i) => `${i + 1}. ${x.title}\n   ${x.url}\n   ${x.snippet}`).join('\n') : 'No results.', summary: `${results.length} results` };
+        }
+        const page = await web.fetchUrl(input.url);
+        return { text: `${page.title ? page.title + '\n' : ''}${page.url}\n\n${page.text}`, summary: page.title || 'fetched' };
       }
       case 'search': {
         const hits = await ws.search(input.query, { regex: !!input.regex, glob: input.glob || '' }, 200);
@@ -353,7 +409,7 @@ class AgentManager {
     }
   }
 
-  async run({ chatId, runId, text, model: modelId, effort: effortId, mode: modeId, history = [] }) {
+  async run({ chatId, runId, text, model: modelId, effort: effortId, mode: modeId, history = [], images = [] }) {
     const s = settings.load();
     const provider = s.provider === 'anthropic' ? 'anthropic' : 'unsloth';
     const mode = (MODES.find((m) => m.id === modeId) || MODES[0]).id; // older builds sent 'agent' → Build
@@ -383,9 +439,12 @@ class AgentManager {
     }
     const controller = new AbortController();
     chat.controller = controller;
-    chat.messages.push({ role: 'user', content: text });
+    const pics = (Array.isArray(images) ? images : []).filter((im) => im && /^image\/(png|jpeg|gif|webp)$/.test(im.mediaType) && typeof im.data === 'string' && im.data.length < 7_000_000).slice(0, 6);
+    if (!pics.length) chat.messages.push({ role: 'user', content: text });
+    else if (provider === 'anthropic') chat.messages.push({ role: 'user', content: [...pics.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })), { type: 'text', text }] });
+    else chat.messages.push({ role: 'user', content: [{ type: 'text', text }, ...pics.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.mediaType};base64,${im.data}` } }))] });
 
-    const tools = mode === 'build' ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
+    const tools = [...READ_TOOLS, ...(mode === 'build' ? WRITE_TOOLS : []), ...(s.webAccess === 'off' ? [] : WEB_TOOLS)];
     const toolByName = Object.fromEntries(tools.map((t) => [t.name, t]));
     const system = systemPrompt(model, mode, effort, provider);
     let retries = 0;
@@ -454,7 +513,7 @@ class AgentManager {
         if (last && (last.role === 'user' || last.role === 'tool')) chat.messages.push(provider === 'anthropic' ? { role: 'assistant', content: [{ type: 'text', text: '(stopped by the user)' }] } : { role: 'assistant', content: '(stopped by the user)' });
         this.emit(chatId, { type: 'notice', runId, message: 'Stopped.' });
       } else {
-        if (last && last.role === 'user' && typeof last.content === 'string') chat.messages.pop();
+        if (last && last.role === 'user' && !(Array.isArray(last.content) && last.content.some((b) => b.type === 'tool_result'))) chat.messages.pop();
         else if (last && (last.role === 'user' || last.role === 'tool')) chat.messages.push(provider === 'anthropic' ? { role: 'assistant', content: [{ type: 'text', text: '(error)' }] } : { role: 'assistant', content: '(error)' });
         this.emit(chatId, { type: 'error', runId, message: describeError(err) });
       }

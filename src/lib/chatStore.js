@@ -119,7 +119,9 @@ export const chats = {
     if (!text.trim() || chat.running) return;
     let full = text;
     const parts = [];
+    const images = context.filter((c) => c.kind === 'image').map((c) => ({ mediaType: c.mediaType, data: c.data }));
     for (const c of context) {
+      if (c.kind === 'image') continue;
       if (c.kind === 'selection') parts.push(`<selection path="${c.path}" lines="${c.startLine}-${c.endLine}">\n${c.text}\n</selection>`);
       else {
         try {
@@ -138,9 +140,9 @@ export const chats = {
       title: c.items.length === 0 ? (title || text.slice(0, 60)) : c.title,
       running: true,
       runId,
-      items: [...c.items, { type: 'user', text, context }, { type: 'assistant', runId, blocks: [], running: true, model: model?.name, mode }],
+      items: [...c.items, { type: 'user', text, context: context.map(({ data, ...rest }) => rest) }, { type: 'assistant', runId, blocks: [], running: true, model: model?.name, mode }],
     }));
-    api.agent.run({ chatId: chat.id, runId, text: full, model: model?.id, effort: effort?.id, mode, history });
+    api.agent.run({ chatId: chat.id, runId, text: full, model: model?.id, effort: effort?.id, mode, history, images });
   },
   stop(id) { api.agent.stop(id || activeChat().id); },
   approve(chatId, block, ok) {
@@ -180,7 +182,7 @@ api.agent.onEvent((ev) => {
         : { ...it, blocks: [...it.blocks, { kind: 'tool', toolId: ev.toolId, name: ev.name, input: ev.input, status: 'running' }] }));
       break;
     case 'approval':
-      patchTool(chatId, ev.toolId, (b) => ({ ...b, approval: ev.id, status: 'approval' }));
+      patchTool(chatId, ev.toolId, (b) => ({ ...b, approval: ev.id, approvalText: ev.command, approvalKind: ev.kind, status: 'approval' }));
       break;
     case 'tool_output':
       patchTool(chatId, ev.toolId, (b) => ({ ...b, live: ((b.live || '') + ev.data).slice(-40000) }));

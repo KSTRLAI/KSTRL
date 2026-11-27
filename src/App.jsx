@@ -290,6 +290,21 @@ export default function App() {
   // Connect API: send people to kstrlsi for a key, then let them paste it in.
   const connectApi = useCallback(() => { api.auth.login(); setConnectOpen('waiting'); }, []);
 
+  // .kstrl/rules.md: create it with a starter template if needed, then open it in the IDE.
+  const editProjectRules = useCallback(async () => {
+    if (!workspace) { toast('Open a project first'); return; }
+    const p = '.kstrl/rules.md';
+    try { await api.fs.readFile(p); }
+    catch {
+      try {
+        await api.fs.create(p, false);
+        await api.fs.writeFile(p, '# Project rules for Kestrel\n\nKestrel follows these in every chat in this project. Examples:\n\n- Use TypeScript and functional React components\n- Run `npm test` after changes\n- Never edit files in /generated\n');
+      } catch (e) { toast(cleanErr(e)); return; }
+    }
+    setSettingsOpen(null);
+    openFile(p);
+  }, [workspace, toast, openFile]);
+
   // ---------- windows ----------
   const goIde = useCallback((payload) => { if (!IDE) api.windows.openIde(payload); }, []);
   const goHome = useCallback(() => { if (IDE) api.windows.focusHome(); }, []);
@@ -505,7 +520,7 @@ export default function App() {
 
       {settingsOpen ? (
         <div className="body">
-          <SettingsPage info={info} settings={settings} onChange={updateSettings} onBack={() => setSettingsOpen(null)} initialTab={settingsOpen} commands={commands} onLogin={connectApi} />
+          <SettingsPage info={info} settings={settings} onChange={updateSettings} onBack={() => setSettingsOpen(null)} initialTab={settingsOpen} commands={commands} onLogin={connectApi} onProjectRules={editProjectRules} />
         </div>
       ) : isHome ? (
         <div className="body">

@@ -26,6 +26,7 @@ const DEFAULTS = {
   effort: 'normal',
   mode: 'build', // build | plan | ask
   autoRunCommands: false,
+  webAccess: 'ask', // ask | allow | off
   customInstructions: '',
   // Workspace / UI
   maxSteps: 60,
