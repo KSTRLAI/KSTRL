@@ -3,7 +3,7 @@ import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, Folde
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
 import Avatar from './Avatar.jsx';
-import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, RefreshCw, KeyRound } from 'lucide-react';
+import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, LogIn, RefreshCw, Power } from 'lucide-react';
 
 const SITE = 'https://kstrlsi.base44.app/';
 const ISSUES = 'https://github.com/KSTRLAI/KSTRL/issues/new';
@@ -22,7 +22,7 @@ function Ring({ value, total }) {
   );
 }
 
-export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast }) {
+export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast, onLogin }) {
   const [acct, setAcct] = useState(null);
   const s = useChats();
   const current = activeChat(s);
@@ -42,7 +42,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   const loose = s.chats.filter((c) => !c.project && (c.items.length || c.running) && (!filter || c.title.toLowerCase().includes(filter.toLowerCase())));
 
   const steps = [
-    { done: !!settings.configured, label: 'Connect your API', action: 'Connect API', run: onServer, Icon: KeyRound },
+    { done: !!settings.configured, label: 'Log in to KSTRL', action: 'Log in', run: onServer, Icon: LogIn },
     { done: !!workspace || (settings.recentFolders || []).length > 0, label: 'Open a project', action: 'Open a Project', run: onOpenFolder, Icon: FolderOpen },
     { done: !!settings.onboarded, label: 'Send your first message', action: 'Ask Kestrel', run: onNewChat, Icon: SquarePen },
   ];
@@ -116,7 +116,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
       <div className="hs-user">
         <button className="hs-acct" title="Account" onClick={(e) => setAcct(acct ? null : e.currentTarget)}>
           <Avatar size={28} />
-          <span className="name">{settings.userName || 'You'}</span>
+          <span className="name">{settings.account?.name || settings.userName || 'You'}</span>
         </button>
         {(update?.status === 'ready' || update?.status === 'available') && <button className="btn grad update-btn" title={`KSTRL ${update.version}`} onClick={onUpdate}><ArrowUpCircle size={13} /> Update</button>}
         <button className="icon-btn" title="Settings (Ctrl+,)" onClick={onSettings}><SettingsIcon size={15} /></button>
@@ -124,6 +124,14 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
       {acct && (
         <Popover anchor={acct} onClose={() => setAcct(null)} width={250}>
           <div className="acct-menu">
+            {settings.loggedIn && (
+              <div className="acct-head">
+                <Avatar size={30} />
+                <div style={{ minWidth: 0 }}><div className="nm">{settings.account?.name || 'Your account'}</div>{settings.account?.email && <div className="em">{settings.account.email}</div>}</div>
+                <span className={'pl' + (settings.usageToday?.plan === 'max' ? ' max' : '')}>{settings.usageToday?.plan === 'max' ? 'MAX' : 'Free'}</span>
+              </div>
+            )}
+            {settings.loggedIn && <div className="acct-sep" />}
             {[
               [SettingsIcon, 'Settings', 'Ctrl+,', onSettings],
               '-',
@@ -133,7 +141,8 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
               [TriangleAlert, 'Report Issue', '', () => window.kstrl.shell.openExternal(ISSUES)],
               [MessageCircle, 'Contact Us', '', () => window.kstrl.shell.openExternal(SITE)],
               '-',
-              [LogOut, 'Quit KSTRL', '', () => window.close()],
+              settings.loggedIn ? [LogOut, 'Log Out', '', async () => { await window.kstrl.auth.logout(); onToast?.('Logged out'); }] : [LogIn, 'Log In', '', onLogin],
+              [Power, 'Quit KSTRL', '', () => window.close()],
             ].map((it, i) => it === '-' ? <div key={i} className="acct-sep" /> : (
               <button key={it[1]} className="acct-item" onClick={() => { setAcct(null); it[3](); }}>
                 {React.createElement(it[0], { size: 16 })}

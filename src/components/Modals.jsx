@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Loader2, ExternalLink } from 'lucide-react';
+import { X, Loader2, ExternalLink, LogIn } from 'lucide-react';
 import { monaco } from '../lib/monaco.js';
 import { languageFor } from '../lib/lang.js';
 
@@ -66,18 +66,26 @@ export function InputDialog({ title, desc, value = '', placeholder, button = 'OK
 
 const KEY_SITE = 'https://kstrlsi.base44.app/';
 
-// Connect API: get a key on kstrlsi, paste it here. Asks for the API URL only when the build doesn't include one.
-export function ConnectApiDialog({ settings, onClose, onConnected }) {
+// Log in through the website (kstrl:// link back into the app), or paste an API key as a fallback.
+// Asks for the API URL only when the build doesn't include one.
+export function ConnectApiDialog({ settings, waiting: startWaiting, onClose, onConnected }) {
   const needsUrl = !settings.usingBuiltinServer && !settings.builtinServer;
+  const [waiting, setWaiting] = useState(!!startWaiting);
+  const [paste, setPaste] = useState(false);
   const [key, setKey] = useState('');
   const [url, setUrl] = useState(settings.unslothURL || '');
   const [state, setState] = useState(null); // null | 'testing' | { error }
+  const was = useRef(settings.loggedIn);
+  useEffect(() => { if (settings.loggedIn && !was.current) { onConnected?.(settings); onClose(); } was.current = settings.loggedIn; }, [settings.loggedIn]); // eslint-disable-line
+
+  const login = () => { api.auth.login(); setWaiting(true); };
   const connect = async () => {
     if (!key.trim() || (needsUrl && !url.trim()) || state === 'testing') return;
     setState('testing');
     const r = await api.server.test({ key: key.trim(), ...(needsUrl ? { url: url.trim() } : {}) });
     if (!r?.ok) { setState({ error: r?.error || 'Could not connect' }); return; }
     const next = await api.settings.update({ provider: 'unsloth', unslothKey: key.trim(), ...(needsUrl ? { unslothURL: r.url || url.trim() } : {}) });
+    api.auth.refresh();
     onConnected?.(next);
     onClose();
   };
@@ -85,25 +93,26 @@ export function ConnectApiDialog({ settings, onClose, onConnected }) {
   return (
     <div className="overlay center" onMouseDown={onClose}>
       <div className="input-dialog connect-dialog glass-strong" onMouseDown={(e) => e.stopPropagation()}>
-        <h3>Connect API</h3>
-        <p>Get your KSTRL API key from kstrlsi, then paste it below.</p>
-        <div className="cstep">
-          <span className="n">1</span>
-          <span className="t">Get your API key</span>
-          <button className="btn" onClick={() => api.shell.openExternal(KEY_SITE)}>Open kstrlsi <ExternalLink size={12} /></button>
-        </div>
-        <div className="cstep col">
-          <div className="cstep-row"><span className="n">2</span><span className="t">Paste it here</span></div>
-          <input className="input mono" type="password" autoFocus placeholder="API key" value={key} onChange={(e) => { setKey(e.target.value); setState(null); }} onKeyDown={onKey} />
-          {needsUrl && <input className="input mono" placeholder="API URL, e.g. https://api.example.com" value={url} onChange={(e) => { setUrl(e.target.value); setState(null); }} onKeyDown={onKey} />}
-        </div>
-        {state?.error && <div className="cerr">{state.error}</div>}
-        <div className="row">
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn light" disabled={!key.trim() || (needsUrl && !url.trim()) || state === 'testing'} onClick={connect}>
-            {state === 'testing' ? <><Loader2 size={13} className="spin" /> Connecting…</> : 'Connect'}
-          </button>
-        </div>
+        <h3>Log in to KSTRL</h3>
+        <p>Use your kstrlsi account. If you're already logged in on the website, it only takes a click.</p>
+        <button className="btn light login-btn" onClick={login}>{waiting ? <><Loader2 size={14} className="spin" /> Waiting for your browser…</> : <><LogIn size={14} /> Log in with kstrlsi</>}</button>
+        {waiting && <div className="login-wait">Finish in the browser window that just opened — KSTRL connects by itself. <button className="link" onClick={login}>Open it again</button></div>}
+        {!paste ? (
+          <button className="link paste-toggle" onClick={() => setPaste(true)}>Or paste an API key instead</button>
+        ) : (
+          <div className="cstep col">
+            <div className="cstep-row"><span className="t">API key</span><button className="link" onClick={() => api.shell.openExternal(KEY_SITE)}>Get one on kstrlsi <ExternalLink size={11} /></button></div>
+            <input className="input mono" type="password" autoFocus placeholder="Paste your API key" value={key} onChange={(e) => { setKey(e.target.value); setState(null); }} onKeyDown={onKey} />
+            {needsUrl && <input className="input mono" placeholder="API URL, e.g. https://api.example.com" value={url} onChange={(e) => { setUrl(e.target.value); setState(null); }} onKeyDown={onKey} />}
+            {state?.error && <div className="cerr">{state.error}</div>}
+            <div className="row" style={{ marginTop: 4 }}>
+              <button className="btn light" disabled={!key.trim() || (needsUrl && !url.trim()) || state === 'testing'} onClick={connect}>
+                {state === 'testing' ? <><Loader2 size={13} className="spin" /> Connecting…</> : 'Connect'}
+              </button>
+            </div>
+          </div>
+        )}
+        <div className="row"><button className="btn ghost" onClick={onClose}>Cancel</button></div>
       </div>
     </div>
   );

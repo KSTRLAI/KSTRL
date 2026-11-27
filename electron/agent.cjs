@@ -125,12 +125,27 @@ function LIMIT_MSG(short) {
     : `You've used all of today's free usage. It resets at ${t} — or upgrade to KSTRL MAX for 20× more.`;
 }
 
+// Rebuild a conversation from saved turns (after a restart the model context is gone).
+function seedMessages(history) {
+  const msgs = [];
+  for (const h of Array.isArray(history) ? history.slice(-40) : []) {
+    if (!h || (h.role !== 'user' && h.role !== 'assistant') || typeof h.text !== 'string') continue;
+    const last = msgs[msgs.length - 1];
+    if (last && last.role === h.role) last.content += '\n\n' + h.text;
+    else msgs.push({ role: h.role, content: h.text });
+  }
+  while (msgs.length && msgs[0].role !== 'user') msgs.shift();
+  if (msgs.length && msgs[msgs.length - 1].role === 'user') msgs.push({ role: 'assistant', content: '(no reply)' });
+  return msgs;
+}
+
 function cleanMsg(e) { return String(e && e.message ? e.message : e); }
 
 function describeError(err) {
   if (err instanceof oai.ProviderError) {
     if (err.status === 0) return err.message;
-    if (err.status === 401 || err.status === 403) return 'Your API key was rejected. Get a new one at kstrlsi.base44.app and click Connect API to paste it in.';
+    if (err.status === 429 && /usage_limit|usage limit|quota/i.test(err.message)) return LIMIT_MSG();
+    if (err.status === 401 || err.status === 403) return 'Your login has expired or the API key was rejected. Click Log in to sign in again.';
     if (err.status === 404) return `The Unsloth server could not find that model or endpoint. Check the model selection in Settings → Model Server. (${err.message})`;
     return `Unsloth server error (${err.status}): ${err.message}`;
   }
@@ -308,6 +323,7 @@ class AgentManager {
       apiKey: unsloth.key,
       signal,
       body: { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: toOpenAITools(tools), tool_choice: 'auto', stream_options: { include_usage: true } },
+      extraHeaders: { 'X-KSTRL-Mode': ctx.mode, 'X-KSTRL-Model': ctx.model.id },
       onText: (delta) => this.emit(chatId, { type: 'text', runId, delta }),
       onThinking: (delta) => this.emit(chatId, { type: 'thinking', runId, delta }),
       onToolStart: (id, name) => this.emit(chatId, { type: 'tool_pending', runId, toolId: id, name }),
@@ -336,7 +352,7 @@ class AgentManager {
     }
   }
 
-  async run({ chatId, runId, text, model: modelId, effort: effortId, mode: modeId }) {
+  async run({ chatId, runId, text, model: modelId, effort: effortId, mode: modeId, history = [] }) {
     const s = settings.load();
     const provider = s.provider === 'anthropic' ? 'anthropic' : 'unsloth';
     const mode = (MODES.find((m) => m.id === modeId) || MODES[0]).id; // older builds sent 'agent' → Build
@@ -355,13 +371,13 @@ class AgentManager {
       client = new Anthropic({ apiKey, baseURL: s.baseURL || process.env.KSTRL_BASE_URL || undefined, maxRetries: 2 });
     } else {
       unsloth = settings.getUnsloth();
-      if (!settings.isConfigured()) { this.emit(chatId, { type: 'error', runId, message: 'KSTRL isn\'t connected yet. Click Connect API, get your API key from kstrlsi.base44.app and paste it in.', connect: true }); return done(); }
+      if (!settings.isConfigured()) { this.emit(chatId, { type: 'error', runId, message: 'You\'re not logged in yet. Click Log in to connect KSTRL with your kstrlsi account.', connect: true }); return done(); }
     }
 
     let chat = this.chats.get(chatId);
     if (!chat || chat.provider !== provider) {
       if (chat && chat.messages.length) this.emit(chatId, { type: 'notice', runId, message: 'Model server changed — starting a fresh context for this chat.' });
-      chat = { provider, messages: [], controller: null };
+      chat = { provider, messages: seedMessages(history), controller: null };
       this.chats.set(chatId, chat);
     }
     const controller = new AbortController();
@@ -443,6 +459,7 @@ class AgentManager {
       }
     } finally {
       chat.controller = null;
+      require('./auth.cjs').refresh().catch(() => {}); // pick up server-side usage after each run
       done();
     }
   }
@@ -469,7 +486,7 @@ class AgentManager {
         out = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       } else {
         const unsloth = settings.getUnsloth();
-        if (!settings.isConfigured()) throw new Error('KSTRL isn\'t connected yet. Click Connect API and paste your API key.');
+        if (!settings.isConfigured()) throw new Error('You\'re not logged in yet. Click Log in to connect KSTRL.');
         const r = await oai.streamChat({
           baseURL: unsloth.url, apiKey: unsloth.key,
           body: { model: await this.serverModel(model, unsloth), messages: [{ role: 'system', content: system }, { role: 'user', content: user }] },

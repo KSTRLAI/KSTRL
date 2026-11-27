@@ -58,11 +58,11 @@ function thinkSplitter(onText, onThinking) {
   };
 }
 
-async function streamChat({ baseURL, apiKey, body, signal, onText, onThinking, onToolStart }) {
+async function streamChat({ baseURL, apiKey, body, signal, onText, onThinking, onToolStart, extraHeaders }) {
   const base = normalizeBase(baseURL);
   let res;
   try {
-    res = await fetch(`${base}/chat/completions`, { method: 'POST', headers: headers(apiKey), body: JSON.stringify({ ...body, stream: true }), signal });
+    res = await fetch(`${base}/chat/completions`, { method: 'POST', headers: { ...headers(apiKey), ...(extraHeaders || {}) }, body: JSON.stringify({ ...body, stream: true }), signal });
   } catch (e) {
     if (signal?.aborted) throw e;
     throw new ProviderError(0, `Could not reach the Unsloth server at ${base} (${e.cause?.code || e.message}).`);
@@ -72,7 +72,7 @@ async function streamChat({ baseURL, apiKey, body, signal, onText, onThinking, o
     const t = await res.clone().text().catch(() => '');
     if (/stream_options|include_usage/i.test(t)) {
       const { stream_options, ...rest } = body;
-      return streamChat({ baseURL, apiKey, body: rest, signal, onText, onThinking, onToolStart });
+      return streamChat({ baseURL, apiKey, body: rest, signal, onText, onThinking, onToolStart, extraHeaders });
     }
   }
   if (!res.ok) {

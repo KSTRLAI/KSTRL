@@ -48,7 +48,8 @@ const DEFAULTS = {
   autoUpdate: true,
   // Stats
   usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
-  plan: 'free', // free | max
+  plan: 'free', // free | max (local fallback; a logged-in account's plan comes from the server)
+  account: null, // { name, email, plan, usage: { used, limit, resetsAt }, source: 'server'|'link', fetchedAt, expired }
   daily: null, // { date: 'YYYY-MM-DD', used, byModel: {}, byMode: {} }
   onboarded: false,
 };
@@ -133,7 +134,16 @@ function daily() {
 
 function usageView() {
   const d = daily();
-  const plan = PLANS[cache.plan] || PLANS.free;
+  const acct = cache.account;
+  // Logged in to a server that reports usage: its numbers are the truth.
+  if (acct && acct.source === 'server' && acct.usage) {
+    const plan = PLANS[acct.plan] || PLANS.free;
+    const limit = acct.usage.limit || plan.daily;
+    const used = Math.round(acct.usage.used * 10) / 10;
+    const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
+    return { plan: plan.id, planName: plan.name, limit, used, left: Math.max(0, limit - used), percent: Math.min(100, (used / limit) * 100), resetsAt: acct.usage.resetsAt || midnight.getTime(), byModel: d.byModel, byMode: d.byMode, server: true };
+  }
+  const plan = PLANS[(acct && acct.plan) || cache.plan] || PLANS.free;
   const midnight = new Date(); midnight.setHours(24, 0, 0, 0);
   const used = Math.round(d.used * 10) / 10;
   return { plan: plan.id, planName: plan.name, limit: plan.daily, used, left: Math.max(0, plan.daily - used), percent: Math.min(100, (used / plan.daily) * 100), resetsAt: midnight.getTime(), byModel: d.byModel, byMode: d.byMode };
@@ -170,14 +180,14 @@ function isConfigured() {
   load();
   if (cache.provider === 'anthropic') return !!getApiKey();
   const u = getUnsloth();
-  return !!u.url && (!!u.key || !u.builtin); // the KSTRL API needs a key; a self-hosted server may not
+  return !!u.url && !!u.key; // logged in (or a pasted API key)
 }
 
 function publicView() {
   load();
   const { apiKeyEnc, unslothKeyEnc, daily: _d, ...rest } = cache;
   const un = getUnsloth();
-  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), userName: require('node:os').userInfo().username };
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), loggedIn: !!(unseal(cache.unslothKeyEnc) && cache.account && !cache.account.expired), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {

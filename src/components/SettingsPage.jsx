@@ -143,7 +143,7 @@ function ServerSettings({ info, settings, onChange }) {
 
 const fmt = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n || 0));
 
-export default function SettingsPage({ info, settings, onChange, onBack, initialTab = 'general', commands = [] }) {
+export default function SettingsPage({ info, settings, onChange, onBack, initialTab = 'general', commands = [], onLogin }) {
   const [tab, setTab] = useState(initialTab === 'server' ? 'models' : initialTab === 'kestrel' ? 'agents' : initialTab);
   const [q, setQ] = useState('');
   const models = info?.models || [];
@@ -160,7 +160,10 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
   // Data-driven sections so search can find any row.
   const sections = [
     { tab: 'general', title: null, rows: [
-      { t: 'Plan', d: settings.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free', c: <button className="btn" onClick={() => setTab('plan')}>Manage</button> },
+      { t: 'Account', d: settings.loggedIn ? [settings.account?.name, settings.account?.email].filter(Boolean).join(' · ') || 'Logged in' : settings.account?.expired ? 'Your login expired' : 'Not logged in', c: settings.loggedIn
+        ? <button className="btn" onClick={() => api.auth.logout()}>Log Out</button>
+        : <button className="btn light" onClick={() => onLogin?.()}>Log In</button> },
+      { t: 'Plan', d: settings.usageToday?.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free', c: <button className="btn" onClick={() => setTab('plan')}>Manage</button> },
       { t: 'Upgrade to KSTRL MAX', d: '20× the daily usage of Free, Max effort on every model and early access to new models.', c: <button className="btn grad" onClick={() => api.shell.openExternal(SITE)}><ArrowUpCircle size={13} /> Upgrade</button> },
     ] },
     { tab: 'general', title: 'Startup', rows: [
@@ -228,8 +231,8 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       <div className="plan-grid">
         <div className="set-card plan">
           <div className="label">Current plan</div>
-          <div className="plan-name">{settings.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free'}</div>
-          <div className="set-note">{settings.plan === 'max' ? '20× the daily usage of Free.' : `${fmt(info?.plans?.free?.daily || 0)} credits a day. Resets at midnight.`}</div>
+          <div className="plan-name">{settings.usageToday?.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free'}</div>
+          <div className="set-note">{settings.usageToday?.plan === 'max' ? '20× the daily usage of Free.' : `${fmt(info?.plans?.free?.daily || 0)} credits a day. Resets at midnight.`}</div>
         </div>
         <div className="gold-glass plan">
           <div className="gt">KSTRL MAX</div>

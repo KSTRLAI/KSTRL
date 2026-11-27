@@ -5,7 +5,7 @@ const base = (p) => p.split(/[\\/]/).pop();
 
 // Empty IDE window, Cursor-style: wordmark, plan line and three action cards.
 export default function IdeWelcome({ settings, workspace, onOpenFolder, onClone, onSsh, onOpenRecent, onUpgrade, onFiles, onChat, onTerminal }) {
-  const max = settings.plan === 'max';
+  const max = settings.usageToday?.plan === 'max';
   const cards = workspace
     ? [[FileSearch, 'Go to file', onFiles], [MessageSquarePlus, 'Ask Kestrel', onChat], [TerminalSquare, 'New terminal', onTerminal]]
     : [[FolderOpen, 'Open project', onOpenFolder], [GitBranchPlus, 'Clone repo', onClone], [SquareTerminal, 'Connect via SSH', onSsh]];

@@ -149,6 +149,7 @@ export default function App() {
   useEffect(() => api.onCommand((c) => {
     if (c === 'newchat' && !IDE) { setSettingsOpen(null); setHomePage('chat'); store.newChat(null); }
     if (c?.type === 'ide-open' && IDE) ideOpenRef.current?.(c);
+    if (c?.type === 'auth' && !IDE && !c.ok) toast(c.error || 'Login failed');
   }), []);
 
   const updateSettings = useCallback(async (patch) => {
@@ -270,7 +271,7 @@ export default function App() {
   useAutomationScheduler(IDE ? NO_AUTOMATIONS : settings, runAutomation); // only the home window runs automations
 
   // Connect API: send people to kstrlsi for a key, then let them paste it in.
-  const connectApi = useCallback(() => { api.shell.openExternal('https://kstrlsi.base44.app/'); setConnectOpen(true); }, []);
+  const connectApi = useCallback(() => { api.auth.login(); setConnectOpen('waiting'); }, []);
 
   // ---------- windows ----------
   const goIde = useCallback((payload) => { if (!IDE) api.windows.openIde(payload); }, []);
@@ -440,7 +441,7 @@ export default function App() {
     onOpenSettings: () => setSettingsOpen(settings.configured ? 'general' : 'server'), onToast: toast, onManageModels: () => setSettingsOpen('models'),
     onNewProject: newProject, onOpenFolder: () => pickFolder(), onOpenRecent: openRecent, onUsage: () => setSettingsOpen('plan'), onConnect: () => connectApi(),
   };
-  const upgradeVisible = settings.plan !== 'max';
+  const upgradeVisible = settings.usageToday?.plan !== 'max';
 
   return (
     <div className={'app' + (IDE ? ' ide-window' : '') + (settings.reduceTransparency ? ' reduce-transparency' : '')}>
@@ -484,7 +485,7 @@ export default function App() {
 
       {settingsOpen ? (
         <div className="body">
-          <SettingsPage info={info} settings={settings} onChange={updateSettings} onBack={() => setSettingsOpen(null)} initialTab={settingsOpen} commands={commands} />
+          <SettingsPage info={info} settings={settings} onChange={updateSettings} onBack={() => setSettingsOpen(null)} initialTab={settingsOpen} commands={commands} onLogin={connectApi} />
         </div>
       ) : isHome ? (
         <div className="body">
@@ -508,6 +509,7 @@ export default function App() {
                 update={update}
                 onUpdate={() => (update?.status === 'available' ? api.update.download() : api.update.install())}
                 onShortcuts={() => setSettingsOpen('keys')}
+                onLogin={connectApi}
                 onToast={toast}
               />
               <div className={'resizer' + (dragHome ? ' dragging' : '')} onMouseDown={startHome} />
@@ -584,7 +586,7 @@ export default function App() {
         <span className="spacer" />
         <button className="item" onClick={() => (settings.configured ? setSettingsOpen('server') : connectApi())} title="Model server">
           {settings.configured ? <CircleCheck size={12} color="var(--ok)" /> : <CircleAlert size={12} color="var(--warn)" />}
-          {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'KSTRL API') : 'Connect API'}
+          {settings.configured ? (settings.provider === 'anthropic' ? 'Anthropic API' : 'KSTRL API') : 'Log in'}
         </button>
         <button className="item" onClick={() => setSettingsOpen('server')}><Sparkles size={12} color="var(--accent)" /><span>{modelLabel(info, settings)}</span></button>
         {update?.status === 'downloading' && <span className="item">Downloading update {update.percent ?? 0}%</span>}
@@ -620,7 +622,7 @@ export default function App() {
         </Popover>
       )}
       {palette && <Palette mode={palette} files={files} commands={commands} onClose={() => setPalette(null)} onOpenFile={openFile} />}
-      {connectOpen && <ConnectApiDialog settings={settings} onClose={() => setConnectOpen(false)} onConnected={(s) => { setSettings(s); toast('Connected — you’re ready to chat'); }} />}
+      {connectOpen && <ConnectApiDialog settings={settings} waiting={connectOpen === 'waiting'} onClose={() => setConnectOpen(false)} onConnected={(s) => { setSettings(s); toast(s.account?.name ? `Logged in as ${s.account.name}` : 'Connected — you’re ready to chat'); }} />}
       {dialog && <InputDialog {...dialog} onClose={() => setDialog(null)} onError={(e) => toast(cleanErr(e))} />}
       {diff && <DiffModal diff={diff} onClose={() => setDiff(null)} onOpenFile={openFile} />}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast glass-strong">{t.text}</div>)}</div>

@@ -9,7 +9,62 @@ const newChatObj = (project = null) => ({ id: uid('chat'), title: 'New chat', pr
 
 let state = (() => { const c = newChatObj(); return { chats: [c], activeId: c.id, history: [c.id], historyIndex: 0 }; })();
 const listeners = new Set();
-const set = (fn) => { state = fn(state); listeners.forEach((l) => l()); };
+const set = (fn) => { state = fn(state); listeners.forEach((l) => l()); scheduleSave(); };
+
+// ---- persistence: each window keeps its own chat list on disk ----
+const KIND = window.location.hash === '#ide' ? 'ide' : 'home';
+let loaded = false;
+let saveTimer = null;
+const clip = (t, n) => (typeof t === 'string' && t.length > n ? t.slice(0, n) + '\n…(truncated)' : t);
+function serialize(s) {
+  const chats = s.chats.filter((c) => c.items.length).slice(0, 60).map((c) => ({
+    ...c,
+    running: false,
+    runId: null,
+    items: c.items.map((it) => (it.type !== 'assistant' ? it : {
+      ...it,
+      running: false,
+      blocks: it.blocks.map((b) => (b.kind !== 'tool' ? b : {
+        ...b,
+        approval: null,
+        live: undefined,
+        output: clip(b.output, 4000),
+        status: ['pending', 'running', 'approval'].includes(b.status) ? 'err' : b.status,
+        summary: ['pending', 'running', 'approval'].includes(b.status) ? 'interrupted' : b.summary,
+      })),
+    })),
+  }));
+  return { version: 1, chats, activeId: s.activeId };
+}
+function scheduleSave() {
+  if (!loaded) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api.chats.save(KIND, serialize(state)).catch(() => {}), 800);
+}
+window.addEventListener('beforeunload', () => { if (loaded) api.chats.save(KIND, serialize(state)); });
+api.chats.load(KIND).then((data) => {
+  const saved = data && Array.isArray(data.chats) ? serialize({ chats: data.chats, activeId: data.activeId }).chats : [];
+  if (saved.length) {
+    // Keep whatever was started before the load finished, then the saved chats.
+    const fresh = state.chats.filter((c) => c.items.length || c.running);
+    const blank = newChatObj(activeChat().project);
+    state = { ...state, chats: [...(fresh.length ? fresh : [blank]), ...saved.filter((c) => !fresh.some((f) => f.id === c.id))], activeId: fresh.length ? state.activeId : blank.id };
+    state.history = [state.activeId];
+    state.historyIndex = 0;
+    listeners.forEach((l) => l());
+  }
+  loaded = true;
+}).catch(() => { loaded = true; });
+
+// Earlier turns of a chat as plain text, so Kestrel keeps the conversation after a restart.
+function transcript(chat) {
+  const out = [];
+  for (const it of chat.items) {
+    if (it.type === 'user') out.push({ role: 'user', text: clip(it.text, 8000) });
+    else if (it.type === 'assistant') out.push({ role: 'assistant', text: clip(it.blocks.filter((b) => b.kind === 'text').map((b) => b.text).join('\n\n'), 8000) || '(no reply)' });
+  }
+  return out.slice(-40);
+}
 const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); };
 
 export function useChats() {
@@ -76,6 +131,7 @@ export const chats = {
     if (activePath) parts.push(`<editor_state>The user currently has ${activePath} open in the editor.</editor_state>`);
     if (parts.length) full = `${text}\n\n${parts.join('\n\n')}`;
     const runId = uid('run');
+    const history = transcript(chat);
     patchChat(chat.id, (c) => ({
       ...c,
       project: c.project ?? project ?? null,
@@ -84,7 +140,7 @@ export const chats = {
       runId,
       items: [...c.items, { type: 'user', text, context }, { type: 'assistant', runId, blocks: [], running: true, model: model?.name, mode }],
     }));
-    api.agent.run({ chatId: chat.id, runId, text: full, model: model?.id, effort: effort?.id, mode });
+    api.agent.run({ chatId: chat.id, runId, text: full, model: model?.id, effort: effort?.id, mode, history });
   },
   stop(id) { api.agent.stop(id || activeChat().id); },
   approve(chatId, block, ok) {

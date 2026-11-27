@@ -8,6 +8,7 @@ const { TerminalManager } = require('./terminal.cjs');
 const { MODELS, EFFORTS, MODES, PLANS } = require('./models.cjs');
 const { spawn } = require('node:child_process');
 const updater = require('./updater.cjs');
+const auth = require('./auth.cjs');
 
 const isDev = !!process.env.KSTRL_DEV;
 let win = null; // Agents home window
@@ -152,6 +153,30 @@ async function cloneRepo(url) {
 
 const handle = (ch, fn) => ipcMain.handle(ch, async (_e, ...args) => fn(...args));
 
+// Chat history, one file per window kind.
+const chatsFile = (kind) => path.join(app.getPath('userData'), `chats-${kind === 'ide' ? 'ide' : 'home'}.json`);
+handle('chats:load', (kind) => { try { return JSON.parse(fs.readFileSync(chatsFile(kind), 'utf8')); } catch { return null; } });
+handle('chats:save', (kind, data) => {
+  const f = chatsFile(kind);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f + '.tmp', JSON.stringify(data));
+  fs.renameSync(f + '.tmp', f);
+  return true;
+});
+
+handle('auth:login', () => auth.login());
+handle('auth:logout', () => auth.logout());
+handle('auth:refresh', () => auth.refresh());
+
+// kstrl://auth?… links from the website (login). Windows passes them in argv; macOS uses open-url.
+async function handleDeepLink(url) {
+  if (!url || !/^kstrl:/i.test(url)) return;
+  const r = await auth.handleUrl(url);
+  focusHome();
+  send('app:command', { type: 'auth', ...r });
+}
+const linkFrom = (argv) => (argv || []).find((a) => /^kstrl:/i.test(a));
+
 handle('window:openIde', (payload) => openIde(payload));
 handle('window:idePending', () => { const p = idePending; idePending = null; return p; });
 handle('window:focusHome', (payload) => focusHome(payload));
@@ -160,7 +185,7 @@ handle('git:clone', (url) => cloneRepo(url));
 handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, models: MODELS.map(({ fallback, ...m }) => m), efforts: EFFORTS, modes: MODES, plans: PLANS }));
 handle('settings:get', () => settings.publicView());
 handle('settings:update', (patch) => {
-  const { plan, daily, usageToday, ...safe } = patch || {}; // the plan and daily usage are not the renderer's to change
+  const { plan, daily, usageToday, account, loggedIn, ...safe } = patch || {}; // plan, usage and account are not the renderer's to change
   const r = settings.update(safe);
   send('settings:changed', r);
   if ('trayIcon' in patch) applyTray();
@@ -212,13 +237,20 @@ handle('term:kill', (id) => terms.kill(id));
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 else {
-  app.on('second-instance', () => focusHome());
+  app.on('second-instance', (_e, argv) => { const link = linkFrom(argv); if (link) handleDeepLink(link); else focusHome(); });
+  app.on('open-url', (e, url) => { e.preventDefault(); app.whenReady().then(() => handleDeepLink(url)); });
+  if (app.isPackaged) app.setAsDefaultProtocolClient('kstrl'); // the installer registers it too
   app.whenReady().then(() => {
     const s = settings.load();
     const appPath = path.resolve(app.getAppPath());
     const argDir = process.argv.slice(1).find((a) => !a.startsWith('-') && path.resolve(a) !== appPath && fs.existsSync(a) && fs.statSync(a).isDirectory());
     try { if (argDir) openWorkspace(argDir); else if (s.reopenLastProject !== false && s.lastFolder && fs.existsSync(s.lastFolder)) openWorkspace(s.lastFolder); } catch {}
     createWindow('home');
+    auth.init(send);
+    const startLink = linkFrom(process.argv);
+    if (startLink) win.webContents.once('did-finish-load', () => handleDeepLink(startLink));
+    setTimeout(() => auth.refresh(), 3000);
+    setInterval(() => auth.refresh(), 10 * 60 * 1000);
     updater.init(send);
     applyTray();
   });
