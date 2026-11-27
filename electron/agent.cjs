@@ -10,6 +10,7 @@ const { EFFORTS, MODES } = require('./models.cjs');
 const oai = require('./providers/openai-compat.cjs');
 const codeindex = require('./codeindex.cjs');
 const web = require('./web.cjs');
+const skills = require('./skills.cjs');
 const fs = require('node:fs');
 
 // Anthropic backends that accept the server-side refusal fallback parameter.
@@ -53,6 +54,12 @@ READ_TOOLS.push({
   name: 'codebase_search',
   description: 'Find the code most relevant to a description, ranked by relevance (e.g. "where is the user logged in", "payment webhook handler"). Returns the best-matching code snippets with line numbers. Use it to orient yourself before reading files; use search for exact text.',
   input_schema: { type: 'object', properties: { query: { type: 'string', description: 'What you are looking for, in words or identifiers.' }, limit: { type: 'integer', description: 'How many snippets (default 8, max 15).' } }, required: ['query'] },
+});
+
+READ_TOOLS.push({
+  name: 'use_skill',
+  description: 'Load the full instructions of one of the skills listed in your instructions. Call it before starting a task that matches a skill.',
+  input_schema: { type: 'object', properties: { name: { type: 'string', description: 'The skill name or id.' } }, required: ['name'] },
 });
 
 const WEB_TOOLS = [
@@ -136,6 +143,7 @@ function systemPrompt(model, mode, effort, provider) {
     provider === 'unsloth' ? EFFORT_HINT[effort] : '',
     s.customInstructions ? `User's custom instructions:\n${s.customInstructions}` : '',
     projectRules(),
+    skillList(s),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -159,6 +167,12 @@ function projectRules() {
     } catch {}
   }
   return '';
+}
+
+function skillList(s) {
+  const list = skills.enabled(s);
+  if (!list.length) return '';
+  return 'Skills you can load with the use_skill tool when a task matches (load the skill before starting that work):\n' + list.map((k) => `- ${k.name}: ${k.description}`).join('\n');
 }
 
 function seedMessages(history) {
@@ -265,6 +279,11 @@ class AgentManager {
         const end = Math.min(lines.length, input.end_line || lines.length);
         const body = lines.slice(start - 1, end).map((l, i) => `${String(start + i).padStart(5)}  ${l}`).join('\n');
         return { text: body || '(empty file)', summary: `${end - start + 1} lines` };
+      }
+      case 'use_skill': {
+        const k = skills.find(settings.load(), input.name);
+        if (!k) return { text: `No enabled skill called "${input.name}". Available: ${skills.enabled(settings.load()).map((x) => x.name).join(', ') || 'none'}.`, summary: 'not found' };
+        return { text: `# Skill: ${k.name}\n\n${k.instructions}`, summary: k.name };
       }
       case 'codebase_search': {
         const hits = await codeindex.search(input.query, Math.max(1, Math.min(15, input.limit || 8)));

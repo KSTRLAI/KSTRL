@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { fmtKbd, mod } from '../lib/keys.js';
-import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown, Square } from 'lucide-react';
+import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown, Square, Sparkles } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
 import Avatar from './Avatar.jsx';
@@ -23,7 +23,7 @@ function Ring({ value, total }) {
   );
 }
 
-export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast, onLogin }) {
+export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast, onLogin, onSkills }) {
   const [acct, setAcct] = useState(null);
   const s = useChats();
   const current = activeChat(s);
@@ -61,9 +61,10 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   return (
     <aside className="home-side glass-pane" style={{ width }}>
       <nav className="hs-nav">
-        <button className={'hs-item' + (homePage !== 'automations' && current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">{fmtKbd('Ctrl+N')}</span></button>
+        <button className={'hs-item' + (homePage === 'chat' && current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">{fmtKbd('Ctrl+N')}</span></button>
         <button className="hs-item" onClick={onSearch}><Search size={16} /> Search <span className="kbd">{fmtKbd('Ctrl+P')}</span></button>
         <button className={'hs-item' + (homePage === 'automations' ? ' active' : '')} onClick={onAutomations}><Bot size={16} /> Automations {(settings.automations || []).some((a) => a.enabled && a.schedule?.type !== 'manual') && <span className="hs-dot" title="Scheduled automations active" />}</button>
+        <button className={'hs-item' + (homePage === 'skills' ? ' active' : '')} onClick={onSkills}><Sparkles size={16} /> Skills</button>
         <button className="hs-item" onClick={onCustomize}><SlidersHorizontal size={16} /> Customize</button>
       </nav>
 

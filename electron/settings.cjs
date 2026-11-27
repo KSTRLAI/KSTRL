@@ -53,6 +53,8 @@ const DEFAULTS = {
   usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
   plan: 'free', // free | max (local fallback; a logged-in account's plan comes from the server)
   account: null, // { name, email, plan, usage: { used, limit, resetsAt }, source: 'server'|'link'|'auto', auto, fetchedAt, expired }
+  skills: [], // custom skills { id, name, description, instructions }
+  skillsOff: [], // ids of skills switched off
   installId: null, // random ID for automatic API keys (not secret)
   daily: null, // { date: 'YYYY-MM-DD', used, byModel: {}, byMode: {} }
   onboarded: false,

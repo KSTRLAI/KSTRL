@@ -11,6 +11,7 @@ import Palette from './components/Palette.jsx';
 import { DiffModal, InputDialog, ConnectApiDialog } from './components/Modals.jsx';
 import IdeWelcome from './components/IdeWelcome.jsx';
 import GitPanel from './components/GitPanel.jsx';
+import SkillsPage from './components/SkillsPage.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
 import { resolveModel, modelLabel, runLabel } from './components/ModelPicker.jsx';
@@ -545,6 +546,7 @@ export default function App() {
                 onUpdate={() => (update?.status === 'available' ? api.update.download() : api.update.install())}
                 onShortcuts={() => setSettingsOpen('keys')}
                 onLogin={connectApi}
+                onSkills={() => setHomePage('skills')}
                 onToast={toast}
               />
               <div className={'resizer' + (dragHome ? ' dragging' : '')} onMouseDown={startHome} />
@@ -553,6 +555,8 @@ export default function App() {
           <main className="home-main">
             {homePage === 'automations'
               ? <AutomationsPage info={info} settings={settings} workspace={workspace} onChange={updateSettings} onRun={runAutomation} />
+              : homePage === 'skills'
+              ? <SkillsPage settings={settings} onChange={updateSettings} onUse={(sk) => { setHomePage('chat'); store.newChat(workspace?.root ?? null); setTimeout(() => homeChatRef.current?.setInput(`Use the ${sk.name} skill to `), 60); }} />
               : <ChatView ref={homeChatRef} variant="home" {...chatProps} />}
           </main>
         </div>

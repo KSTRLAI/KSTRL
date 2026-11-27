@@ -191,6 +191,8 @@ handle('git:message', async () => {
 handle('log:error', (source, message, stack) => crash.report(String(source || 'renderer'), { message: String(message || ''), stack: String(stack || '') }));
 handle('log:openFolder', () => { fs.mkdirSync(crash.logsDir(), { recursive: true }); return shell.openPath(crash.logsDir()); });
 
+handle('skills:list', () => require('./skills.cjs').all(settings.load()));
+
 handle('auth:login', () => auth.login());
 handle('auth:logout', () => auth.logout());
 handle('auth:refresh', () => auth.refresh());

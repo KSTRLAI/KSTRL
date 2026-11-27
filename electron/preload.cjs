@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('kstrl', {
   },
   auth: { login: invoke('auth:login'), logout: invoke('auth:logout'), refresh: invoke('auth:refresh') },
   log: { error: invoke('log:error'), openFolder: invoke('log:openFolder') },
+  skills: { list: invoke('skills:list') },
   chats: { load: invoke('chats:load'), save: invoke('chats:save') },
   fs: {
     readDir: invoke('fs:readDir'), readFile: invoke('fs:readFile'), writeFile: invoke('fs:writeFile'),
