@@ -52,7 +52,8 @@ const DEFAULTS = {
   // Stats
   usage: {}, // { [colossusId]: { requests, inputTokens, outputTokens } }
   plan: 'free', // free | max (local fallback; a logged-in account's plan comes from the server)
-  account: null, // { name, email, plan, usage: { used, limit, resetsAt }, source: 'server'|'link', fetchedAt, expired }
+  account: null, // { name, email, plan, usage: { used, limit, resetsAt }, source: 'server'|'link'|'auto', auto, fetchedAt, expired }
+  installId: null, // random ID for automatic API keys (not secret)
   daily: null, // { date: 'YYYY-MM-DD', used, byModel: {}, byMode: {} }
   onboarded: false,
 };
@@ -190,7 +191,7 @@ function publicView() {
   load();
   const { apiKeyEnc, unslothKeyEnc, daily: _d, ...rest } = cache;
   const un = getUnsloth();
-  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), loggedIn: !!(unseal(cache.unslothKeyEnc) && cache.account && !cache.account.expired), userName: require('node:os').userInfo().username };
+  return { ...rest, hasApiKey: !!getApiKey(), hasUnslothKey: !!unseal(cache.unslothKeyEnc), builtinServer: !!BUILTIN.unslothURL, usingBuiltinServer: un.builtin, configured: isConfigured(), usageToday: usageView(), loggedIn: !!(unseal(cache.unslothKeyEnc) && cache.account && !cache.account.expired && !cache.account.auto), autoKey: !!(cache.account && cache.account.auto), userName: require('node:os').userInfo().username };
 }
 
 function addRecent(folder) {

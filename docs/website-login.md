@@ -102,3 +102,30 @@ The home folder is replaced with `~` before sending; no code or chats are includ
 ## 6. Built-in API URL
 
 Set the repository variable **KSTRL_API_URL** (GitHub → repo → Settings → Secrets and variables → Actions → Variables) to your API's address, e.g. `https://api.kstrl.ai`. The next build includes it, so the login dialog no longer asks for an API URL.
+
+## 7. Automatic keys (no website needed)
+
+On first launch, if KSTRL knows your API URL (see section 6) and has no key yet, it asks your server for one:
+
+```
+POST {API_URL}/v1/kstrl/register
+Content-Type: application/json
+{ "install_id": "6f1c…-uuid", "platform": "win32", "version": "1.5.1" }
+```
+
+Respond with:
+
+```json
+{ "key": "sk-…", "plan": "free" }
+```
+
+Server rules:
+
+- **Same install_id → same key.** Look the ID up first, so restarts and reinstalls don't create new keys.
+- **New install_id → create a key** with your runner's key function on the Free plan, and save `install_id → key` along with the caller's IP.
+- **Rate-limit key creation**, e.g. at most 3 new keys per IP per day and a global cap per hour. Answer **429** when it's exceeded. The app quietly tries again on its next launch.
+- **Banned installs → 403.** The app then shows Log in. Don't create a new key for them.
+- **The master/admin key never leaves the server.** This endpoint creates keys internally.
+- If you revoke an automatic key, requests with it get **401**. The app then calls `/register` again (at most every 10 minutes): return a new key to let the install back in, or 403 to keep it out.
+
+If this endpoint doesn't exist (404), KSTRL falls back to Log in / paste a key. Logging in through the website replaces the automatic key with the person's account key.

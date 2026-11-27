@@ -215,6 +215,7 @@ handle('settings:update', (patch) => {
   const { plan, daily, usageToday, account, loggedIn, ...safe } = patch || {}; // plan, usage and account are not the renderer's to change
   const r = settings.update(safe);
   send('settings:changed', r);
+  if ('unslothURL' in safe) auth.ensureKey();
   if ('trayIcon' in patch) applyTray();
   if ('autoUpdate' in patch) updater.setAuto(patch.autoUpdate);
   return r;
@@ -279,7 +280,7 @@ else {
     auth.init(send);
     const startLink = linkFrom(process.argv);
     if (startLink) win.webContents.once('did-finish-load', () => handleDeepLink(startLink));
-    setTimeout(() => auth.refresh(), 3000);
+    setTimeout(() => auth.ensureKey().then((got) => { if (!got) auth.refresh(); }), 2000);
     setInterval(() => auth.refresh(), 10 * 60 * 1000);
     updater.init(send);
     applyTray();
