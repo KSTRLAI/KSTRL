@@ -102,7 +102,7 @@ async function ensureKey() {
       await refresh();
       notify();
       return true;
-    } catch { return false; }
+    } catch (e) { if (process.env.KSTRL_DEBUG) console.error('register failed', e); return false; }
   })().finally(() => { registering = null; });
   return registering;
 }

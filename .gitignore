@@ -4,3 +4,5 @@ release/
 *.log
 .DS_Store
 electron/build-config.json
+__pycache__/
+*.egg-info/
