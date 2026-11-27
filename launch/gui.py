@@ -14,6 +14,8 @@ from tkinter import messagebox, simpledialog, ttk
 
 SUGGESTED = [
     "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    "google/gemma-3-1b-it",
+    "unsloth/gemma-3-1b-it",
     "Qwen/Qwen2.5-Coder-7B-Instruct",
     "Qwen/Qwen3-4B",
     "Qwen/Qwen3-8B",
@@ -187,7 +189,7 @@ class App:
     # ---------- models ----------
     def build_models(self, nb):
         f = ttk.Frame(nb, padding=10)
-        ttk.Label(f, text="Download a model from Hugging Face (repo id, e.g. Qwen/Qwen2.5-Coder-7B-Instruct). Supported: Llama, Mistral, Qwen2, Qwen3.").pack(anchor="w")
+        ttk.Label(f, text="Download a model from Hugging Face (repo id, e.g. Qwen/Qwen2.5-Coder-7B-Instruct). Supported: Llama, Mistral, Qwen2, Qwen3, Gemma 1/2/3 (text).").pack(anchor="w")
         row = ttk.Frame(f)
         row.pack(fill="x", pady=6)
         self.repo = tk.StringVar()

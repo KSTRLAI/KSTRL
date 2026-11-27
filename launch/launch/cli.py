@@ -182,7 +182,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         a.fn(a)
-    except (FileNotFoundError, ValueError, RuntimeError) as e:
+    except (FileNotFoundError, ValueError, RuntimeError) as e:  # noqa: PERF203
         sys.exit(f"Error: {e}")
 
 

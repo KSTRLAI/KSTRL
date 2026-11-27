@@ -76,7 +76,7 @@ New KSTRL installs then get a key automatically and start chatting. On your own 
 `launch/engine.py`, written from scratch on PyTorch tensors. It doesn't use llama.cpp or Hugging Face transformers:
 
 - Reads `config.json` and the `.safetensors` weights directly (sharded checkpoints included).
-- Architectures: **Llama 1/2/3.x, Mistral, Qwen2/Qwen2.5 (incl. Coder), Qwen3**.
+- Architectures: **Llama 1/2/3.x, Mistral, Qwen2/Qwen2.5 (incl. Coder), Qwen3, Gemma 1/2/3**.
 - RMSNorm, rotary embeddings (with Llama 3 scaling), grouped-query attention, Qwen's QKV biases and Qwen3's Q/K norms, and SwiGLU.
 - A preallocated KV cache with prefix reuse, so follow-up messages in a chat don't re-process the whole conversation.
 - Sampling with temperature, top-k and top-p; streaming text that's safe for multi-byte characters.

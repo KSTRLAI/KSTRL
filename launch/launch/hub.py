@@ -19,7 +19,16 @@ def pull(repo: str, token: str | None = None) -> Path:
     from huggingface_hub import snapshot_download
     dest = local_dir(repo)
     dest.mkdir(parents=True, exist_ok=True)
-    snapshot_download(repo_id=repo, local_dir=str(dest), allow_patterns=FILES, token=token)
+    try:
+        snapshot_download(repo_id=repo, local_dir=str(dest), allow_patterns=FILES, token=token)
+    except Exception as e:  # noqa: BLE001
+        name = type(e).__name__
+        if name in ("GatedRepoError",) or "gated" in str(e).lower() or "401" in str(e):
+            raise RuntimeError(f"{repo} is a gated model. Open https://huggingface.co/{repo} , accept the license, "
+                               "then create a Read token at https://huggingface.co/settings/tokens and paste it in the HF token box.") from None
+        if name == "RepositoryNotFoundError" or "404" in str(e):
+            raise RuntimeError(f"Couldn't find {repo} on Hugging Face. Check the spelling (owner/name).") from None
+        raise
     cfg = json.loads((dest / "config.json").read_text())
     if not list(dest.glob("*.safetensors")):
         raise RuntimeError(f"{repo} has no .safetensors weights. Pick a repo that ships safetensors (most do).")

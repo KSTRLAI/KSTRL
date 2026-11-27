@@ -40,15 +40,53 @@ class ChatFormat:
         env.globals["strftime_now"] = lambda fmt: datetime.now().strftime(fmt)
         self.env = env
         self.template = env.from_string(tpl)
+        # Templates like Gemma's know nothing about tools (and reject a "tool" role): fold tools into plain text.
+        self.native_tools = bool(self.tool_template) or "tool" in tpl
         self.tool_tpl = env.from_string(self.tool_template) if self.tool_template else None
         self.bos = _token_str(tok_config.get("bos_token"))
         self.eos = _token_str(tok_config.get("eos_token"))
 
     def render(self, messages: list[dict], tools: list[dict] | None = None) -> str:
         msgs = [normalize_message(m) for m in messages]
+        if not self.native_tools:
+            msgs, tools = fold_tools(msgs, tools), None
         tpl = self.tool_tpl if (tools and self.tool_tpl) else self.template
         return tpl.render(messages=msgs, tools=tools or None, add_generation_prompt=True,
                           bos_token=self.bos, eos_token=self.eos)
+
+
+TOOL_PROMPT = ("You can call tools. To call one, reply with a JSON object inside <tool_call></tool_call> tags, for example:\n"
+               "<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"src/app.js\"}}\n</tool_call>\n"
+               "You may make several calls in one reply. Tool results come back inside <tool_response></tool_response>.\n"
+               "Available tools:\n")
+
+
+def fold_tools(msgs: list[dict], tools: list[dict] | None) -> list[dict]:
+    """For templates without tool support: describe tools in text, turn tool calls/results into text,
+    fold the system prompt into the first user turn, and merge turns so roles strictly alternate."""
+    out: list[dict] = []
+    system = "\n\n".join(m["content"] for m in msgs if m["role"] == "system" and m["content"])
+    if tools:
+        system = (system + "\n\n" if system else "") + TOOL_PROMPT + "\n".join(json.dumps(t.get("function", t)) for t in tools)
+    for m in msgs:
+        role, text = m["role"], m.get("content") or ""
+        if role == "system":
+            continue
+        if role == "tool":
+            role, text = "user", f"<tool_response>\n{text}\n</tool_response>"
+        elif role == "assistant" and m.get("tool_calls"):
+            calls = "\n".join("<tool_call>\n" + json.dumps({"name": c["function"].get("name"), "arguments": c["function"].get("arguments", {})}) + "\n</tool_call>" for c in m["tool_calls"])
+            text = (text + "\n" if text else "") + calls
+        if out and out[-1]["role"] == role:
+            out[-1]["content"] += "\n\n" + text
+        else:
+            out.append({"role": role, "content": text})
+    if system:
+        if out and out[0]["role"] == "user":
+            out[0]["content"] = system + "\n\n" + out[0]["content"]
+        else:
+            out.insert(0, {"role": "user", "content": system})
+    return out
 
 
 def normalize_message(m: dict) -> dict:

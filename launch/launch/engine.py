@@ -1,6 +1,6 @@
 """The Launch engine: runs Hugging Face transformer checkpoints directly from their safetensors files.
 
-Supported architectures: Llama (1/2/3.x), Mistral, Qwen2/Qwen2.5 (incl. Coder), Qwen3.
+Supported architectures: Llama (1/2/3.x), Mistral, Qwen2/Qwen2.5 (incl. Coder), Qwen3, Gemma 1/2/3 (text).
 Written from scratch on PyTorch tensors: RMSNorm, rotary embeddings (incl. Llama 3 scaling),
 grouped-query attention with a preallocated KV cache, SwiGLU MLP, and sampling.
 """
@@ -18,7 +18,8 @@ import torch.nn.functional as F
 from safetensors import safe_open
 from tokenizers import Tokenizer
 
-SUPPORTED = {"llama", "mistral", "qwen2", "qwen3"}
+SUPPORTED = {"llama", "mistral", "qwen2", "qwen3", "gemma", "gemma2", "gemma3_text"}
+GEMMA = {"gemma", "gemma2", "gemma3_text"}
 
 
 @dataclass
@@ -37,11 +38,22 @@ class Config:
     max_pos: int
     tie_embeddings: bool
     eos_ids: list[int] = field(default_factory=list)
+    # Gemma family
+    gemma: bool = False
+    query_scale: float | None = None      # attention scale (default 1/sqrt(head_dim))
+    attn_softcap: float | None = None
+    final_softcap: float | None = None
+    sliding_window: int | None = None
+    sliding: list[bool] = field(default_factory=list)  # per layer: local (sliding-window) attention
+    local_rope_theta: float | None = None
+    sandwich: bool = False                # extra post-attention / pre+post-feedforward norms (Gemma 2/3)
 
     @staticmethod
     def load(path: Path) -> "Config":
         c = json.loads((path / "config.json").read_text())
         arch = c.get("model_type", "")
+        if arch == "gemma3" and isinstance(c.get("text_config"), dict):
+            raise ValueError("This is a multimodal Gemma 3 checkpoint. Launch runs the text-only ones, e.g. google/gemma-3-1b-it.")
         if arch not in SUPPORTED:
             raise ValueError(f"Launch can't run '{arch}' models yet. Supported: {', '.join(sorted(SUPPORTED))}.")
         if c.get("quantization_config"):
@@ -50,8 +62,15 @@ class Config:
         heads = c["num_attention_heads"]
         # Newer checkpoints keep rotary settings in "rope_parameters"; older ones use rope_theta + rope_scaling.
         rp = c.get("rope_parameters") or {}
+        local_theta = None
+        if "full_attention" in rp or "sliding_attention" in rp:  # Gemma 3 in the newer format: per layer type
+            local_theta = (rp.get("sliding_attention") or {}).get("rope_theta")
+            rp = rp.get("full_attention") or {}
+        rs = c.get("rope_scaling")
+        if isinstance(rs, dict) and ("full_attention" in rs or "sliding_attention" in rs):
+            rs = rs.get("full_attention")
         rope_theta = rp.get("rope_theta", c.get("rope_theta", 10000.0))
-        rope_scaling = c.get("rope_scaling") or (rp if rp.get("rope_type", "default") != "default" else None)
+        rope_scaling = (rs if rs and (rs.get("rope_type") or rs.get("type", "default")) != "default" else None) or (rp if rp.get("rope_type", "default") != "default" else None)
         eos = c.get("eos_token_id")
         gen = path / "generation_config.json"
         if gen.exists():
@@ -72,7 +91,32 @@ class Config:
             max_pos=c.get("max_position_embeddings", 4096),
             tie_embeddings=bool(c.get("tie_word_embeddings", False)),
             eos_ids=[int(e) for e in eos_ids],
+            **(Config._gemma(c, arch, local_theta) if arch in GEMMA else {}),
         )
+
+    @staticmethod
+    def _gemma(c: dict, arch: str, local_theta) -> dict:
+        layers = c["num_hidden_layers"]
+        if c.get("layer_types"):
+            sliding = [t == "sliding_attention" for t in c["layer_types"]]
+        elif arch == "gemma2":
+            sliding = [i % 2 == 0 for i in range(layers)]
+        elif arch == "gemma3_text":
+            pat = c.get("sliding_window_pattern", 6)
+            sliding = [(i + 1) % pat != 0 for i in range(layers)]
+        else:
+            sliding = [False] * layers
+        q = c.get("query_pre_attn_scalar")
+        return {
+            "gemma": True,
+            "query_scale": q ** -0.5 if q else None,
+            "attn_softcap": c.get("attn_logit_softcapping") if arch == "gemma2" else None,
+            "final_softcap": c.get("final_logit_softcapping"),
+            "sliding_window": c.get("sliding_window") if any(sliding) else None,
+            "sliding": sliding,
+            "local_rope_theta": local_theta or c.get("rope_local_base_freq") if arch == "gemma3_text" else None,
+            "sandwich": arch != "gemma",
+        }
 
 
 def pick_device(want: str | None = None) -> tuple[torch.device, torch.dtype]:
@@ -99,10 +143,16 @@ def rms_norm(x: torch.Tensor, w: torch.Tensor, eps: float) -> torch.Tensor:
     return (xf.to(x.dtype)) * w
 
 
-def rope_inv_freq(cfg: Config) -> torch.Tensor:
+def gemma_norm(x: torch.Tensor, w: torch.Tensor, eps: float) -> torch.Tensor:
+    xf = x.float()
+    xf = xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + eps)
+    return (xf * (1.0 + w.float())).to(x.dtype)
+
+
+def rope_inv_freq(cfg: Config, theta: float | None = None, scaling: bool = True) -> torch.Tensor:
     d = cfg.head_dim
-    inv = 1.0 / (cfg.rope_theta ** (torch.arange(0, d, 2, dtype=torch.float64) / d))
-    rs = cfg.rope_scaling or {}
+    inv = 1.0 / ((theta or cfg.rope_theta) ** (torch.arange(0, d, 2, dtype=torch.float64) / d))
+    rs = (cfg.rope_scaling or {}) if scaling else {}
     kind = rs.get("rope_type") or rs.get("type")
     if kind == "llama3":
         factor = rs["factor"]
@@ -142,12 +192,16 @@ class Model:
         self.has_qk_norm = "model.layers.0.self_attn.q_norm.weight" in self.w
         if "lm_head.weight" not in self.w:
             self.w["lm_head.weight"] = self.w["model.embed_tokens.weight"]
-        inv = rope_inv_freq(c).to(self.device)
         t = torch.arange(self.max_ctx, device=self.device, dtype=torch.float32)
-        freqs = torch.outer(t, inv)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos = emb.cos().to(self.dtype)
-        self.sin = emb.sin().to(self.dtype)
+
+        def table(inv):
+            freqs = torch.outer(t, inv.to(self.device))
+            emb = torch.cat((freqs, freqs), dim=-1)
+            return emb.cos().to(self.dtype), emb.sin().to(self.dtype)
+        self.cos, self.sin = table(rope_inv_freq(c))
+        # Gemma 3 sliding-window layers use their own rotary base, without scaling.
+        self.cos_l, self.sin_l = table(rope_inv_freq(c, c.local_rope_theta, scaling=False)) if c.local_rope_theta else (self.cos, self.sin)
+        self.norm = gemma_norm if c.gemma else rms_norm
         shape = (c.layers, 1, c.kv_heads, self.max_ctx, c.head_dim)
         self.k_cache = torch.zeros(shape, dtype=self.dtype, device=self.device)
         self.v_cache = torch.zeros(shape, dtype=self.dtype, device=self.device)
@@ -172,11 +226,16 @@ class Model:
         if start + n > self.max_ctx:
             raise ValueError(f"Context is full ({self.max_ctx} tokens).")
         x = w["model.embed_tokens.weight"][torch.tensor(ids, device=self.device)].unsqueeze(0)  # [1, n, hidden]
-        cos, sin = self.cos[start:start + n], self.sin[start:start + n]
+        if c.gemma:
+            x = x * torch.tensor(c.hidden ** 0.5, dtype=x.dtype)
+        norm = self.norm
         rep = c.heads // c.kv_heads
         for i in range(c.layers):
             p = f"model.layers.{i}."
-            h = rms_norm(x, w[p + "input_layernorm.weight"], c.eps)
+            local = bool(c.sliding and c.sliding[i])
+            cos, sin = (self.cos_l, self.sin_l) if local else (self.cos, self.sin)
+            cos, sin = cos[start:start + n], sin[start:start + n]
+            h = norm(x, w[p + "input_layernorm.weight"], c.eps)
             q = F.linear(h, w[p + "self_attn.q_proj.weight"], w.get(p + "self_attn.q_proj.bias"))
             k = F.linear(h, w[p + "self_attn.k_proj.weight"], w.get(p + "self_attn.k_proj.bias"))
             v = F.linear(h, w[p + "self_attn.v_proj.weight"], w.get(p + "self_attn.v_proj.bias"))
@@ -184,8 +243,8 @@ class Model:
             k = k.view(1, n, c.kv_heads, c.head_dim).transpose(1, 2)
             v = v.view(1, n, c.kv_heads, c.head_dim).transpose(1, 2)
             if self.has_qk_norm:
-                q = rms_norm(q, w[p + "self_attn.q_norm.weight"], c.eps)
-                k = rms_norm(k, w[p + "self_attn.k_norm.weight"], c.eps)
+                q = norm(q, w[p + "self_attn.q_norm.weight"], c.eps)
+                k = norm(k, w[p + "self_attn.k_norm.weight"], c.eps)
             q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
             self.k_cache[i, :, :, start:start + n] = k
             self.v_cache[i, :, :, start:start + n] = v
@@ -194,20 +253,42 @@ class Model:
             if rep > 1:
                 kk = kk.repeat_interleave(rep, dim=1)
                 vv = vv.repeat_interleave(rep, dim=1)
-            if n == 1:
+            if c.gemma:
+                # causal (+ sliding window) mask; manual attention so the scale and soft-capping match Gemma
+                qi = torch.arange(start, start + n, device=self.device).unsqueeze(1)
+                kj = torch.arange(start + n, device=self.device).unsqueeze(0)
+                mask = kj <= qi
+                if local and c.sliding_window:
+                    mask = mask & (qi - kj < c.sliding_window)
+                scores = torch.matmul(q.float(), kk.float().transpose(-1, -2)) * (c.query_scale or c.head_dim ** -0.5)
+                if c.attn_softcap:
+                    scores = torch.tanh(scores / c.attn_softcap) * c.attn_softcap
+                scores = scores.masked_fill(~mask, float("-inf"))
+                attn = torch.matmul(torch.softmax(scores, dim=-1), vv.float()).to(self.dtype)
+            elif n == 1:
                 attn = F.scaled_dot_product_attention(q, kk, vv)
             else:
                 # causal mask that also sees the cached prefix
                 mask = torch.ones(n, start + n, dtype=torch.bool, device=self.device).tril(diagonal=start)
                 attn = F.scaled_dot_product_attention(q, kk, vv, attn_mask=mask)
             attn = attn.transpose(1, 2).reshape(1, n, c.heads * c.head_dim)
-            x = x + F.linear(attn, w[p + "self_attn.o_proj.weight"])
-            h = rms_norm(x, w[p + "post_attention_layernorm.weight"], c.eps)
+            o = F.linear(attn, w[p + "self_attn.o_proj.weight"])
+            if c.sandwich:
+                x = x + norm(o, w[p + "post_attention_layernorm.weight"], c.eps)
+                h = norm(x, w[p + "pre_feedforward_layernorm.weight"], c.eps)
+            else:
+                x = x + o
+                h = norm(x, w[p + "post_attention_layernorm.weight"], c.eps)
             gate = F.linear(h, w[p + "mlp.gate_proj.weight"])
             up = F.linear(h, w[p + "mlp.up_proj.weight"])
-            x = x + F.linear(F.silu(gate) * up, w[p + "mlp.down_proj.weight"])
-        x = rms_norm(x[:, -1:], w["model.norm.weight"], c.eps)
-        return F.linear(x, w["lm_head.weight"])[0, -1].float()
+            act = F.gelu(gate, approximate="tanh") if c.gemma else F.silu(gate)
+            m = F.linear(act * up, w[p + "mlp.down_proj.weight"])
+            x = x + (norm(m, w[p + "post_feedforward_layernorm.weight"], c.eps) if c.sandwich else m)
+        x = norm(x[:, -1:], w["model.norm.weight"], c.eps)
+        logits = F.linear(x, w["lm_head.weight"])[0, -1].float()
+        if c.final_softcap:
+            logits = torch.tanh(logits / c.final_softcap) * c.final_softcap
+        return logits
 
     @torch.inference_mode()
     def full_logits(self, ids: list[int]) -> torch.Tensor:
