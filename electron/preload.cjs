@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('kstrl', {
   server: { test: invoke('server:test') },
   onCommand: on('app:command'),
   isFocused: () => document.hasFocus(),
+  platform: process.platform,
   update: { state: invoke('update:state'), check: invoke('update:check'), install: invoke('update:install'), download: invoke('update:download'), onStatus: on('update:status') },
   term: {
     create: invoke('term:create'), write: invoke('term:write'), resize: invoke('term:resize'), kill: invoke('term:kill'),

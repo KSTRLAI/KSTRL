@@ -5,4 +5,6 @@ import './styles.css';
 import './lib/monaco.js';
 import App from './App.jsx';
 
+if (window.kstrl?.platform === 'darwin') document.documentElement.classList.add('mac');
+
 createRoot(document.getElementById('root')).render(<App />);

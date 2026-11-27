@@ -99,9 +99,9 @@ const EFFORT_HINT = {
 function systemPrompt(model, mode, effort, provider) {
   const s = settings.load();
   const root = ws.getRoot();
-  const shell = process.platform === 'win32' ? 'PowerShell' : 'bash';
+  const shell = process.platform === 'win32' ? 'PowerShell' : require('node:path').basename(process.env.SHELL || 'bash');
   return [
-    `You are Kestrel, the AI coding agent built into KSTRL, an AI-native code editor for Windows. You are running the ${model.name} model. If the user asks which model you are, say you are ${model.name} by KSTRL.`,
+    `You are Kestrel, the AI coding agent built into KSTRL, an AI-native code editor. You are running the ${model.name} model. If the user asks which model you are, say you are ${model.name} by KSTRL.`,
     root
       ? `The user's project is open at: ${root}\nAll tool paths are relative to that folder. The OS is ${os.type()} ${os.release()} and commands run in ${shell}.`
       : 'No project folder is open yet. You can still answer questions; ask the user to open or create a project folder before working with files.',

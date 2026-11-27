@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { fmtKbd, mod } from '../lib/keys.js';
 import {
   ArrowLeft, Search, Settings as Gear, Palette, CreditCard, Bot, Boxes, Keyboard, Info, BookOpen, ArrowUpRight, ExternalLink,
   Server, Cloud, PlugZap, Loader2, CircleCheck, KeyRound, Check, Minus, Plus, Zap, Code2, Brain, Sparkles, ArrowUpCircle, RotateCcw,
@@ -214,7 +215,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
     }) },
     { tab: 'models', title: 'Model Server', custom: 'server', rows: [{ t: 'Model server Unsloth URL API key Anthropic connection', d: '' }] },
 
-    { tab: 'keys', title: null, rows: commands.filter((c) => c.kbd).map((c) => ({ t: c.label, d: '', c: <span className="kbd-chip mono">{c.kbd}</span> })) },
+    { tab: 'keys', title: null, rows: commands.filter((c) => c.kbd).map((c) => ({ t: c.label, d: '', c: <span className="kbd-chip mono">{fmtKbd(c.kbd)}</span> })) },
   ];
 
   const query = q.trim().toLowerCase();

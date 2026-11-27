@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { fmtKbd, mod } from '../lib/keys.js';
 
 export default function TitleBar({ menus, brand = true, title, left, right }) {
   const [open, setOpen] = useState(null); // { index, x, y }
@@ -44,7 +45,7 @@ export default function TitleBar({ menus, brand = true, title, left, right }) {
             ) : (
               <button key={j} className="item" disabled={it.disabled} onClick={() => { setOpen(null); it.run(); }}>
                 <span>{it.label}</span>
-                {it.kbd && <span className="kbd">{it.kbd}</span>}
+                {it.kbd && <span className="kbd">{fmtKbd(it.kbd)}</span>}
               </button>
             ),
           )}

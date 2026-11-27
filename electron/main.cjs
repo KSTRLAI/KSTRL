@@ -53,8 +53,10 @@ function createWindow(kind = 'home') {
     backgroundColor: kind === 'ide' ? '#1b1b1b' : '#0e0e0e',
     icon: path.join(__dirname, '..', isDev ? 'public' : 'dist', 'icon.png'),
     show: false,
-    titleBarStyle: 'hidden',
-    titleBarOverlay: { color: kind === 'ide' ? '#161616' : '#0b0b0b', symbolColor: '#e5e5e5', height: 38 },
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'darwin'
+      ? { trafficLightPosition: { x: 14, y: 12 } }
+      : { titleBarOverlay: { color: kind === 'ide' ? '#161616' : '#0b0b0b', symbolColor: '#e5e5e5', height: 38 } }),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -63,7 +65,8 @@ function createWindow(kind = 'home') {
       spellcheck: false,
     },
   });
-  Menu.setApplicationMenu(null);
+  // Windows: menus live in the window. macOS needs an app menu for Cmd+C/V/Q and window handling.
+  Menu.setApplicationMenu(process.platform === 'darwin' ? Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'windowMenu' }]) : null);
   w.once('ready-to-show', () => { if (kind === 'home') w.maximize(); w.show(); });
   if (isDev) w.loadURL('http://localhost:5173' + (kind === 'ide' ? '/#ide' : ''));
   else w.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), kind === 'ide' ? { hash: 'ide' } : undefined);
@@ -257,3 +260,4 @@ else {
 }
 
 app.on('window-all-closed', () => { terms.killAll(); app.quit(); });
+app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow('home'); });

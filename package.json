@@ -54,10 +54,7 @@
       "package.json",
       "!node_modules/node-pty/build/**",
       "!node_modules/node-pty/deps/**",
-      "!node_modules/node-pty/src/**",
-      "!node_modules/node-pty/prebuilds/darwin-*/**",
-      "!node_modules/node-pty/prebuilds/win32-arm64/**",
-      "!node_modules/node-pty/third_party/conpty/*/win10-arm64/**"
+      "!node_modules/node-pty/src/**"
     ],
     "win": {
       "icon": "build/icon.ico",
@@ -74,6 +71,11 @@
             "x64"
           ]
         }
+      ],
+      "files": [
+        "!node_modules/node-pty/prebuilds/darwin-*/**",
+        "!node_modules/node-pty/prebuilds/win32-arm64/**",
+        "!node_modules/node-pty/third_party/conpty/*/win10-arm64/**"
       ]
     },
     "nsis": {
@@ -108,7 +110,30 @@
           "kstrl"
         ]
       }
-    ]
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.developer-tools",
+      "identity": "-",
+      "artifactName": "KSTRL-mac-${arch}.${ext}",
+      "files": [
+        "!node_modules/node-pty/prebuilds/win32-*/**",
+        "!node_modules/node-pty/third_party/**"
+      ]
+    },
+    "dmg": {
+      "title": "KSTRL",
+      "artifactName": "KSTRL-mac-${arch}.${ext}"
+    }
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"

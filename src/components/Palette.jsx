@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { fmtKbd, mod } from '../lib/keys.js';
 import { FileCode2, ChevronRight } from 'lucide-react';
 
 // Fuzzy subsequence score: lower is better, -1 = no match.
@@ -73,7 +74,7 @@ export default function Palette({ mode, files, commands, onClose, onOpenFile }) 
               {it.file ? <FileCode2 size={14} color="var(--text-3)" /> : <ChevronRight size={14} color="var(--accent)" />}
               <span>{it.label}</span>
               {it.sub && <span className="sub">{it.sub}</span>}
-              {it.kbd && <span className="kbd">{it.kbd}</span>}
+              {it.kbd && <span className="kbd">{fmtKbd(it.kbd)}</span>}
             </button>
           ))}
         </div>

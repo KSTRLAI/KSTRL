@@ -14,6 +14,7 @@ import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
 import { resolveModel, modelLabel, runLabel } from './components/ModelPicker.jsx';
 import { languageFor } from './lib/lang.js';
+import { mod } from './lib/keys.js';
 import { useChats, chats as store, activeChat, getState as getChatState } from './lib/chatStore.js';
 const useChatsSnapshot = getChatState;
 const NO_AUTOMATIONS = { automations: [] };
@@ -340,7 +341,7 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (!e.ctrlKey) return;
+      if (!mod(e)) return;
       const k = e.key.toLowerCase();
       const inEditor = !!document.activeElement?.closest?.('.monaco-editor');
       const map = [

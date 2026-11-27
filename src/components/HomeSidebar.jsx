@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { fmtKbd, mod } from '../lib/keys.js';
 import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, FolderOpen, FolderPlus, ListFilter, MessageSquare, Loader2, X, Settings as SettingsIcon, Server, Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
@@ -60,8 +61,8 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
   return (
     <aside className="home-side glass-pane" style={{ width }}>
       <nav className="hs-nav">
-        <button className={'hs-item' + (homePage !== 'automations' && current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">Ctrl+N</span></button>
-        <button className="hs-item" onClick={onSearch}><Search size={16} /> Search <span className="kbd">Ctrl+P</span></button>
+        <button className={'hs-item' + (homePage !== 'automations' && current.items.length === 0 ? ' active' : '')} onClick={onNewChat}><SquarePen size={16} /> New Chat <span className="kbd">{fmtKbd('Ctrl+N')}</span></button>
+        <button className="hs-item" onClick={onSearch}><Search size={16} /> Search <span className="kbd">{fmtKbd('Ctrl+P')}</span></button>
         <button className={'hs-item' + (homePage === 'automations' ? ' active' : '')} onClick={onAutomations}><Bot size={16} /> Automations {(settings.automations || []).some((a) => a.enabled && a.schedule?.type !== 'manual') && <span className="hs-dot" title="Scheduled automations active" />}</button>
         <button className="hs-item" onClick={onCustomize}><SlidersHorizontal size={16} /> Customize</button>
       </nav>
@@ -147,7 +148,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
               <button key={it[1]} className="acct-item" onClick={() => { setAcct(null); it[3](); }}>
                 {React.createElement(it[0], { size: 16 })}
                 <span>{it[1]}</span>
-                {it[2] && <span className="kbd">{it[2]}</span>}
+                {it[2] && <span className="kbd">{fmtKbd(it[2])}</span>}
               </button>
             ))}
           </div>

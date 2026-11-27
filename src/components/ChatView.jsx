@@ -1,4 +1,5 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { fmtKbd, mod } from '../lib/keys.js';
 import {
   ArrowUp, Square, Plus, X, ChevronDown, Check, Brain, FileCode2, Terminal as TermIcon, Search, FolderTree, FilePen,
   FilePlus2, Loader2, CircleAlert, CircleCheck, CircleX, Infinity as InfinityIcon, MessageCircleQuestion, AtSign, Zap,
@@ -272,7 +273,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     if (e.key === 'Escape' && chat.running) store.stop(chat.id);
-    if (e.key === '.' && e.ctrlKey) { e.preventDefault(); onSettings({ mode: nextMode(mode) }); }
+    if (e.key === '.' && mod(e)) { e.preventDefault(); onSettings({ mode: nextMode(mode) }); }
   };
 
   const openAt = (kind) => (e) => setPop({ kind, anchor: e.currentTarget });
