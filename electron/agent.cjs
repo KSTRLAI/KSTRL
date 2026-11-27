@@ -11,6 +11,7 @@ const oai = require('./providers/openai-compat.cjs');
 const codeindex = require('./codeindex.cjs');
 const web = require('./web.cjs');
 const skills = require('./skills.cjs');
+const compactor = require('./compactor.cjs');
 const fs = require('node:fs');
 
 // Anthropic backends that accept the server-side refusal fallback parameter.
@@ -373,7 +374,9 @@ class AgentManager {
     stream.on('streamEvent', (ev) => {
       if (ev.type === 'content_block_start' && ev.content_block.type === 'tool_use') this.emit(chatId, { type: 'tool_pending', runId, toolId: ev.content_block.id, name: ev.content_block.name });
     });
+    const sentEst = compactor.estimate(chat.messages, system, tools);
     const message = await stream.finalMessage();
+    if (message.usage?.input_tokens && sentEst > 500) chat.ratio = (message.usage.input_tokens + (message.usage.cache_read_input_tokens || 0) + (message.usage.cache_creation_input_tokens || 0)) / sentEst;
     if (message.usage) { this.emit(chatId, { type: 'usage', runId, usage: message.usage }); this.recordUsage(ctx, { input: (message.usage.input_tokens || 0) + (message.usage.cache_creation_input_tokens || 0), output: message.usage.output_tokens || 0 }); }
 
     if (message.stop_reason === 'refusal') {
@@ -394,11 +397,16 @@ class AgentManager {
 
   async turnOpenAI(chat, ctx) {
     const { unsloth, modelId, system, tools, chatId, runId, signal } = ctx;
+    const oaiTools = toOpenAITools(tools);
+    const sentEst = compactor.estimate(chat.messages, system, oaiTools);
+    const body = { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: oaiTools, tool_choice: 'auto', stream_options: { include_usage: true } };
+    // With a context window set, give the reply whatever room the prompt leaves.
+    if (ctx.window) body.max_tokens = Math.max(1024, Math.min(16384, Math.floor(ctx.window - sentEst * (chat.ratio || 1) * 1.05 - 256)));
     const r = await oai.streamChat({
       baseURL: unsloth.url,
       apiKey: unsloth.key,
       signal,
-      body: { model: modelId, messages: [{ role: 'system', content: system }, ...chat.messages], tools: toOpenAITools(tools), tool_choice: 'auto', stream_options: { include_usage: true } },
+      body,
       extraHeaders: { 'X-KSTRL-Mode': ctx.mode, 'X-KSTRL-Model': ctx.model.id },
       onText: (delta) => this.emit(chatId, { type: 'text', runId, delta }),
       onThinking: (delta) => this.emit(chatId, { type: 'thinking', runId, delta }),
@@ -406,6 +414,7 @@ class AgentManager {
     });
     if (r.usage) this.emit(chatId, { type: 'usage', runId, usage: { output_tokens: r.usage.completion_tokens || 0 } });
     this.recordUsage(ctx, { input: r.usage?.prompt_tokens || 0, output: r.usage?.completion_tokens || 0 });
+    if (r.usage?.prompt_tokens && sentEst > 500) chat.ratio = r.usage.prompt_tokens / sentEst; // calibrate the compactor's estimate to this model's tokenizer
     const calls = r.toolCalls.map((c) => {
       let input;
       let parseError = null;
@@ -420,7 +429,26 @@ class AgentManager {
     return { stop: calls.length ? 'tools' : 'end', calls };
   }
 
+  // Keeps the conversation inside the context window (Settings → Agents → Context Window).
+  async compact(chat, ctx) {
+    if (!ctx.window) return;
+    const r = await compactor.fit(chat.messages, {
+      window: ctx.window,
+      system: ctx.system,
+      tools: ctx.provider === 'unsloth' ? toOpenAITools(ctx.tools) : ctx.tools,
+      ratio: chat.ratio,
+      quick: ({ system, user, maxTokens }) => this.quick({ system, user, modelId: 'colossus-2.1', mode: 'plan', maxTokens, signal: ctx.signal }),
+    });
+    if (!r || (!r.summarised && ctx.trimNoticed)) return; // trimming is routine: say it once per run
+    if (!r.summarised) ctx.trimNoticed = true;
+    const k = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : String(n));
+    this.emit(ctx.chatId, { type: 'compact', runId: ctx.runId, summarised: r.summarised, before: r.before, after: r.after,
+      message: `Context compacted to fit the ${k(ctx.window)} window: ${r.summarised ? 'summarised earlier work' : 'trimmed old tool output'} (${k(r.before)} → ${k(r.after)} tokens)` });
+  }
+
   pushResults(chat, results) {
+    const window = settings.load().contextWindow;
+    if (window) results = results.map((r) => ({ ...r, content: compactor.capResult(r.content, window) }));
     if (chat.provider === 'anthropic') {
       chat.messages.push({ role: 'user', content: results.map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: r.content, ...(r.isError ? { is_error: true } : {}) })) });
     } else {
@@ -470,13 +498,14 @@ class AgentManager {
     let turns = 0;
 
     try {
-      const ctx = { client, unsloth, model, effort, mode, system, tools, chatId, runId, signal: controller.signal };
+      const ctx = { client, unsloth, model, effort, mode, system, tools, chatId, runId, provider, window: s.contextWindow || 0, signal: controller.signal };
       if (provider === 'unsloth') ctx.modelId = await this.serverModel(model, unsloth, controller.signal);
       while (true) {
         const maxSteps = Math.max(5, Math.min(500, s.maxSteps || 60));
         if (turns > 0 && !settings.hasUsageLeft()) { this.emit(chatId, { type: 'error', runId, limit: true, message: 'You ran out of usage for today, so Kestrel stopped here. ' + LIMIT_MSG(true) }); break; }
         if (++turns > maxSteps) { this.emit(chatId, { type: 'error', runId, message: `Stopped after ${maxSteps} steps. Send a follow-up to continue (limit is in Settings → Agents).` }); break; }
         this.emit(chatId, { type: 'turn_start', runId });
+        await this.compact(chat, ctx);
 
         let turn;
         try {

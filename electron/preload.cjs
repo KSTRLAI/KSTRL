@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('kstrl', {
     clone: invoke('git:clone'), status: invoke('git:status'), diff: invoke('git:diff'), stage: invoke('git:stage'), unstage: invoke('git:unstage'),
     discard: invoke('git:discard'), commit: invoke('git:commit'), push: invoke('git:push'), pull: invoke('git:pull'), init: invoke('git:init'), message: invoke('git:message'),
   },
-  auth: { login: invoke('auth:login'), logout: invoke('auth:logout'), refresh: invoke('auth:refresh') },
+  auth: { signup: invoke('auth:signup'), signin: invoke('auth:signin'), login: invoke('auth:login'), logout: invoke('auth:logout'), refresh: invoke('auth:refresh') },
   log: { error: invoke('log:error'), openFolder: invoke('log:openFolder') },
   skills: { list: invoke('skills:list') },
   chats: { load: invoke('chats:load'), save: invoke('chats:save') },

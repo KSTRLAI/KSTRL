@@ -4,7 +4,7 @@ import { SquarePen, Search, SlidersHorizontal, Bot, ArrowUpCircle, Folder, Folde
 import { useChats, chats as store, activeChat } from '../lib/chatStore.js';
 import { Popover } from './ChatView.jsx';
 import Avatar from './Avatar.jsx';
-import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, LogIn, RefreshCw, Power } from 'lucide-react';
+import { BookOpen, Keyboard, TriangleAlert, MessageCircle, LogOut, UserPlus, LogIn, RefreshCw, Power } from 'lucide-react';
 
 const SITE = 'https://kstrlsi.base44.app/';
 const ISSUES = 'https://github.com/KSTRLAI/KSTRL/issues/new';
@@ -134,7 +134,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
       <div className="hs-user">
         <button className="hs-acct" title="Account" onClick={(e) => setAcct(acct ? null : e.currentTarget)}>
           <Avatar size={28} />
-          <span className="name">{settings.account?.name || settings.userName || 'You'}</span>
+          <span className="name">{settings.loggedIn && settings.account?.email ? settings.account.email : 'Not logged in'}</span>
         </button>
         {(update?.status === 'ready' || update?.status === 'available') && <button className="btn grad update-btn" title={`KSTRL ${update.version}`} onClick={onUpdate}><ArrowUpCircle size={13} /> Update</button>}
         <button className="icon-btn" title="Settings (Ctrl+,)" onClick={onSettings}><SettingsIcon size={15} /></button>
@@ -145,7 +145,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
             {settings.loggedIn && (
               <div className="acct-head">
                 <Avatar size={30} />
-                <div style={{ minWidth: 0 }}><div className="nm">{settings.account?.name || 'Your account'}</div>{settings.account?.email && <div className="em">{settings.account.email}</div>}</div>
+                <div style={{ minWidth: 0 }}><div className="nm">{settings.account?.email || settings.account?.name || 'Your account'}</div>{settings.account?.name && settings.account?.email && <div className="em">{settings.account.name}</div>}</div>
                 <span className={'pl' + (settings.usageToday?.plan === 'max' ? ' max' : '')}>{settings.usageToday?.plan === 'max' ? 'MAX' : 'Free'}</span>
               </div>
             )}
@@ -159,7 +159,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
               [TriangleAlert, 'Report Issue', '', () => window.kstrl.shell.openExternal(ISSUES)],
               [MessageCircle, 'Contact Us', '', () => window.kstrl.shell.openExternal(SITE)],
               '-',
-              settings.loggedIn ? [LogOut, 'Log Out', '', async () => { await window.kstrl.auth.logout(); onToast?.('Logged out'); }] : [LogIn, 'Log In', '', onLogin],
+              ...(settings.loggedIn ? [[LogOut, 'Log Out', '', async () => { await window.kstrl.auth.logout(); onToast?.('Logged out'); }]] : [[LogIn, 'Log In', '', () => onLogin('login')], [UserPlus, 'Sign Up', '', () => onLogin('signup')]]),
               [Power, 'Quit KSTRL', '', () => window.close()],
             ].map((it, i) => it === '-' ? <div key={i} className="acct-sep" /> : (
               <button key={it[1]} className="acct-item" onClick={() => { setAcct(null); it[3](); }}>

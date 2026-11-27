@@ -532,7 +532,7 @@ const ChatView = forwardRef(function ChatView(props, ref) {
               }
               if (b.kind === 'text') return <Markdown key={j} text={b.text} />;
               if (b.kind === 'tool') return <ToolCard key={b.toolId} block={b} onApprove={(blk, ok) => store.approve(chat.id, blk, ok)} onOpenDiff={onOpenDiff} onOpenFile={onOpenFile} />;
-              if (b.kind === 'notice') return <div key={j} className="notice">{b.text}</div>;
+              if (b.kind === 'notice') return <div key={j} className={'notice' + (b.compact ? ' compact' : '')}>{b.text}</div>;
               if (b.kind === 'error') return (
                 <div key={j} className="error-box"><CircleAlert size={15} style={{ flexShrink: 0, marginTop: 1 }} /><div>{b.text}{/Log in|Connect API/.test(b.text) ? <> <button className="btn" style={{ height: 22, marginLeft: 6 }} onClick={() => props.onConnect?.()}>Log in</button></> : /Settings/.test(b.text) && <> <button className="btn" style={{ height: 22, marginLeft: 6 }} onClick={onOpenSettings}>Open Settings</button></>}</div></div>
               );

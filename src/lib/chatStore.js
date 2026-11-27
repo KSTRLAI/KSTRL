@@ -190,6 +190,9 @@ api.agent.onEvent((ev) => {
     case 'tool_end':
       patchTool(chatId, ev.toolId, (b) => ({ ...b, status: ev.ok ? 'ok' : 'err', summary: ev.summary, diff: ev.diff, output: ev.output, approval: null }));
       break;
+    case 'compact':
+      upd((it) => ({ ...it, blocks: [...it.blocks, { kind: 'notice', compact: true, text: ev.message }] }));
+      break;
     case 'notice':
       upd((it) => ({ ...it, blocks: [...it.blocks, { kind: 'notice', text: ev.message }] }));
       break;

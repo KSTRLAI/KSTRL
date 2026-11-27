@@ -1,12 +1,13 @@
 """Launch.exe — sets up Launch's private runtime on first run (Python + PyTorch for this PC), then runs it.
 
-Double-click: a simple menu. With arguments: passes them to the launch command line,
+Double-click: the Launch window (gui.py). With arguments: passes them to the launch command line,
 e.g.  Launch.exe serve Qwen/Qwen2.5-Coder-7B-Instruct --port 8000
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -14,7 +15,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 PY_VERSION = "3.12.10"
 PY_EMBED = f"https://www.python.org/ftp/python/{PY_VERSION}/python-{PY_VERSION}-embed-amd64.zip"
 GET_PIP = "https://bootstrap.pypa.io/get-pip.py"
@@ -44,19 +45,71 @@ def python_exe() -> Path:
     return RUNTIME / "python.exe" if WIN else RUNTIME / "bin" / "python"
 
 
+LOG = lambda msg, progress=False: print(msg, end="\r" if progress else "\n", flush=True)  # the window replaces this
+NO_WINDOW = 0x08000000 if WIN else 0  # CREATE_NO_WINDOW: child processes don't flash a console
+
+
 def say(msg: str):
-    print(msg, flush=True)
+    LOG(msg)
+
+
+def child_env() -> dict:
+    return {**os.environ, "PYTHONPATH": str(APP), "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+
+
+def stream(cmd: list[str], on_line=None, env=None, started=None) -> int:
+    """Run a command, passing each output line to on_line(text, progress). Progress-bar redraws (\\r) have progress=True."""
+    on_line = on_line or LOG
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, creationflags=NO_WINDOW)
+    if started:
+        started(p)
+    buf = b""
+    while True:
+        chunk = p.stdout.read1(4096) if hasattr(p.stdout, "read1") else p.stdout.read(1)
+        if not chunk:
+            break
+        buf += chunk
+        parts = re.split(rb"(\r\n|\r|\n)", buf)
+        buf = parts.pop()
+        for text, sep in zip(parts[0::2], parts[1::2]):
+            t = text.decode("utf-8", "replace").rstrip()
+            if t.strip():
+                on_line(t, sep == b"\r")
+    if buf.strip():
+        on_line(buf.decode("utf-8", "replace").rstrip(), False)
+    return p.wait()
+
+
+def launch_cmd(*args: str) -> list[str]:
+    return [str(python_exe()), "-m", "launch", *args]
+
+
+def launch_json(*args: str):
+    """Run a launch command that prints JSON and return the parsed result."""
+    out = subprocess.run(launch_cmd(*args), capture_output=True, text=True, env=child_env(), creationflags=NO_WINDOW, timeout=120)
+    if out.returncode != 0:
+        raise RuntimeError((out.stderr or out.stdout).strip().splitlines()[-1] if (out.stderr or out.stdout).strip() else "failed")
+    return json.loads(out.stdout.strip().splitlines()[-1])
 
 
 def download(url: str, dest: Path):
     say(f"  downloading {url.split('/')[-1]} …")
     with urllib.request.urlopen(url, timeout=120) as r, open(dest, "wb") as f:
-        shutil.copyfileobj(r, f, length=1 << 20)
+        total = int(r.headers.get("Content-Length") or 0)
+        done = 0
+        while True:
+            b = r.read(1 << 20)
+            if not b:
+                break
+            f.write(b)
+            done += len(b)
+            if total:
+                LOG(f"  {done * 100 // total}% of {total / 1e6:.0f} MB", True)
 
 
 def has_nvidia() -> str | None:
     try:
-        out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=15)
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True, timeout=15, creationflags=NO_WINDOW)
         name = out.stdout.strip().splitlines()[0] if out.returncode == 0 and out.stdout.strip() else None
         return name
     except (OSError, subprocess.SubprocessError):
@@ -65,7 +118,7 @@ def has_nvidia() -> str | None:
 
 def pip(*args: str):
     cmd = [str(python_exe()), "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check", *args]
-    if subprocess.run(cmd).returncode != 0:
+    if stream(cmd, lambda t, prog: LOG("    " + t.strip(), prog)) != 0:
         raise RuntimeError("pip " + " ".join(args))
 
 
@@ -74,7 +127,7 @@ def make_python():
         shutil.rmtree(RUNTIME)
     RUNTIME.mkdir(parents=True)
     if not WIN:  # dev/testing on Linux/macOS: a plain virtual environment
-        subprocess.run([sys.executable, "-m", "venv", str(RUNTIME)], check=True)
+        subprocess.run([sys.executable if not getattr(sys, "frozen", False) else "python3", "-m", "venv", str(RUNTIME)], check=True)
         return
     z = BASE / "python-embed.zip"
     download(PY_EMBED, z)
@@ -85,7 +138,8 @@ def make_python():
     pth.write_text(f"{pth.stem}.zip\n.\nLib\\site-packages\n{APP}\nimport site\n")
     gp = BASE / "get-pip.py"
     download(GET_PIP, gp)
-    subprocess.run([str(python_exe()), str(gp), "--no-warn-script-location"], check=True)
+    if stream([str(python_exe()), str(gp), "--no-warn-script-location"], lambda t, prog: LOG("    " + t.strip(), prog)) != 0:
+        raise RuntimeError("Couldn't install pip")
     gp.unlink()
 
 
@@ -120,7 +174,7 @@ def setup(force: bool = False):
         except RuntimeError:
             say("  that didn't work, trying the next option…")
     if not torch_ok:
-        raise SystemExit("Couldn't install PyTorch. Check your internet connection and run Launch again.")
+        raise RuntimeError("Couldn't install PyTorch. Check your internet connection and run Launch again.")
     pip(*DEPS)
     state = {"ok": True, "version": VERSION, "torch": used, "gpu": gpu}
     MARKER.write_text(json.dumps(state))
@@ -129,84 +183,38 @@ def setup(force: bool = False):
 
 
 def run_launch(args: list[str]) -> int:
-    env = {**os.environ, "PYTHONPATH": str(APP)}
-    return subprocess.run([str(python_exe()), "-m", "launch", *args], env=env).returncode
+    """Command-line mode: run launch and print its output to the console Launch.exe was started from."""
+    return stream(launch_cmd(*args), lambda t, prog: print(t, end="\r" if prog else "\n", flush=True), env=child_env())
 
 
-def ask(prompt: str) -> str:
-    try:
-        return input(prompt).strip()
-    except EOFError:
-        return ""
-
-
-def menu(state: dict):
-    hw = f"NVIDIA GPU ({state['gpu']})" if state.get("gpu") and state.get("torch") != "cpu" else "CPU"
-    while True:
-        print(f"\n  LAUNCH {VERSION}  ·  Launch engine  ·  {hw}\n")
-        print("  1) Download a model from Hugging Face")
-        print("  2) Start the API server (for KSTRL)")
-        print("  3) Chat in this window (quick test)")
-        print("  4) Downloaded models")
-        print("  5) Create an API key")
-        print("  6) List API keys and today's usage")
-        print("  7) Reinstall the runtime")
-        print("  0) Quit\n")
-        c = ask("  Choose: ")
-        if c == "1":
-            repo = ask("  Hugging Face repo (e.g. Qwen/Qwen2.5-Coder-7B-Instruct): ")
-            if repo:
-                run_launch(["pull", repo])
-        elif c in ("2", "3"):
-            run_launch(["list"])
-            model = ask("\n  Model to use (type its name): ")
-            if not model:
-                continue
-            if c == "2":
-                port = ask("  Port [8000]: ") or "8000"
-                public = ask("  Allow other computers to connect? (y/N): ").lower().startswith("y")
-                print("\n  Press Ctrl+C to stop the server.\n")
-                try:
-                    run_launch(["serve", model, "--port", port, "--host", "0.0.0.0" if public else "127.0.0.1"])
-                except KeyboardInterrupt:
-                    pass
-            else:
-                while True:
-                    text = ask("\n  You (empty to go back): ")
-                    if not text:
-                        break
-                    run_launch(["run", model, text])
-        elif c == "4":
-            run_launch(["list"])
-        elif c == "5":
-            name = ask("  Name for this key (optional): ")
-            plan = "max" if ask("  MAX plan? (y/N): ").lower().startswith("y") else "free"
-            run_launch(["keys", "create", "--plan", plan] + (["--name", name] if name else []))
-        elif c == "6":
-            run_launch(["keys", "list"])
-        elif c == "7":
-            setup(force=True)
-        elif c in ("0", "q", "quit", "exit"):
-            return
+def attach_console():
+    """Launch.exe is a window app; when it's run from a terminal with arguments, print to that terminal."""
+    if WIN and (sys.stdout is None or not sys.stdout.isatty()):
+        import ctypes
+        if ctypes.windll.kernel32.AttachConsole(-1):
+            sys.stdout = sys.stderr = open("CONOUT$", "w", encoding="utf-8", buffering=1)
+    if sys.stdout is None:  # no terminal at all
+        sys.stdout = sys.stderr = open(os.devnull, "w")
 
 
 def main():
-    os.system("")  # enable ANSI on Windows consoles
-    try:
-        state = setup()
-        install_app()
-        if len(sys.argv) > 1:
+    if len(sys.argv) > 1:
+        attach_console()
+        if sys.argv[1] in ("--version", "-V"):
+            print(f"Launch {VERSION}")
+            return
+        try:
+            setup()
+            install_app()
             sys.exit(run_launch(sys.argv[1:]))
-        menu(state)
-    except KeyboardInterrupt:
-        pass
-    except SystemExit:
-        raise
-    except Exception as e:  # noqa: BLE001
-        print(f"\n  Something went wrong: {e}\n")
-        if len(sys.argv) <= 1:
-            ask("  Press Enter to close.")
-        sys.exit(1)
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:  # noqa: BLE001
+            print(f"Something went wrong: {e}")
+            sys.exit(1)
+        return
+    import gui
+    gui.main(sys.modules[__name__])
 
 
 if __name__ == "__main__":

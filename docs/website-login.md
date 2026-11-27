@@ -2,7 +2,7 @@
 
 This is the contract between the KSTRL desktop app, your website (kstrlsi.base44.app) and your API server (the one in front of Unsloth). Give it to whoever builds the website and server.
 
-## 1. Logging in from the app
+## 1. Logging in through the website (optional — the app has its own screen now, see section 8)
 
 When someone clicks **Log in** in KSTRL, the app opens this page in their browser:
 
@@ -129,3 +129,29 @@ Server rules:
 - If you revoke an automatic key, requests with it get **401**. The app then calls `/register` again (at most every 10 minutes): return a new key to let the install back in, or 403 to keep it out.
 
 If this endpoint doesn't exist (404), KSTRL falls back to Log in / paste a key. Logging in through the website replaces the automatic key with the person's account key.
+
+## 8. Sign up / Log in inside the app (since KSTRL 1.7)
+
+KSTRL now has its own Sign up / Log in screen, so people don't need the website. It shows once on first launch and from **Log In / Sign Up** in the account menu. The app calls your API directly:
+
+```
+POST {api}/v1/kstrl/auth/signup   { "name": "...", "email": "...", "password": "...", "install_id": "<uuid>" }
+POST {api}/v1/kstrl/auth/login    { "email": "...", "password": "...", "install_id": "<uuid>" }
+→ 200 { "key": "<api key for this device>", "name": "...", "email": "...", "plan": "free" | "max" }
+
+POST {api}/v1/kstrl/auth/logout   (Authorization: Bearer <key>)  → 204, revokes that device's key
+```
+
+Errors use the usual `{ "error": { "code": "...", "message": "..." } }`; the app shows `message`. Codes the app understands: `email_taken` (409, switches to Log in), `bad_credentials` (401), `weak_password` / `bad_email` (400), `rate_limited` (429), `banned` (403).
+
+- The password is sent once over HTTPS and never stored by the app. Store only a slow hash (Launch uses scrypt).
+- Each log-in gets its own key, so logging out on one device doesn't affect the others.
+- Count usage per **account**, not per key, so MAX/Free limits apply across all of a person's devices (Launch does this).
+- The profile shows the account's **email**.
+- If the server returns 404 for these endpoints, the app says "This server doesn't support KSTRL accounts yet." Automatic Free keys (section 7) keep working either way.
+
+Launch implements all of this. Manage accounts in the Launch window's **Accounts** tab, or with `launch users list`, `launch users plan <email> max` and `launch users ban <email>`.
+
+## 9. Context window
+
+Settings → Agents → Context Window (default 12k tokens). Before each model turn, KSTRL trims old tool output and, if that isn't enough, summarises earlier work so every request fits. With a window set, requests also send `max_tokens` equal to the room the prompt leaves, so run Launch with `--ctx` at least as big as the window (the Launch app defaults to 16384).

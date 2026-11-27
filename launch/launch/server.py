@@ -73,6 +73,73 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
         key = store.create(plan="free", install_id=install, ip=ip)
         return {"key": key, "plan": "free"}
 
+    # ---- KSTRL: sign up / log in from the app's own screen ----
+    EMAIL_RE = __import__("re").compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
+    attempts: dict[str, list[float]] = {}
+
+    def too_many(ip: str, limit: int = 10, window: float = 600) -> bool:
+        recent = [t for t in attempts.get(ip, []) if time.time() - t < window]
+        recent.append(time.time())
+        attempts[ip] = recent
+        return len(recent) > limit
+
+    def session(user, ip, install):
+        key = store.create(plan=user["plan"], name=user["name"], email=user["email"], install_id=install, ip=ip, user_id=user["id"])
+        return {"key": key, "name": user["name"], "email": user["email"], "plan": user["plan"]}
+
+    async def read_auth(req: Request):
+        try:
+            body = await req.json()
+        except Exception:
+            return None, err(400, "bad_request", "Send JSON")
+        email = str(body.get("email", "")).strip()[:254]
+        password = str(body.get("password", ""))
+        install = str(body.get("install_id", ""))
+        if not EMAIL_RE.match(email):
+            return None, err(400, "bad_email", "Enter a valid email address")
+        if not password:
+            return None, err(400, "bad_password", "Enter your password")
+        return {"email": email, "password": password, "name": str(body.get("name", "")).strip()[:80],
+                "install": install if UUID_RE.match(install) else None}, None
+
+    @app.post("/v1/kstrl/auth/signup")
+    async def signup(req: Request):
+        b, e = await read_auth(req)
+        if e:
+            return e
+        ip = client_ip(req)
+        if too_many(ip) or store.users_since(86400, ip) >= 5:
+            return err(429, "rate_limited", "Too many attempts. Try again later.")
+        if len(b["password"]) < 8 or len(b["password"]) > 200:
+            return err(400, "weak_password", "Use a password with at least 8 characters")
+        if store.user(b["email"]):
+            return err(409, "email_taken", "An account with this email already exists. Log in instead.")
+        uid = store.add_user(b["email"], b["password"], b["name"] or b["email"].split("@")[0], ip)
+        return session(store.db.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(), ip, b["install"])
+
+    @app.post("/v1/kstrl/auth/login")
+    async def login(req: Request):
+        b, e = await read_auth(req)
+        if e:
+            return e
+        ip = client_ip(req)
+        if too_many(ip):
+            return err(429, "rate_limited", "Too many attempts. Try again in a few minutes.")
+        u = store.user(b["email"])
+        ok = Store.check_pw(b["password"], u["pw"]) if u else Store.check_pw(b["password"], Store.hash_pw("x"))  # same work either way
+        if not u or not ok:
+            return err(401, "bad_credentials", "Wrong email or password")
+        if u["banned"]:
+            return err(403, "banned", "This account is blocked")
+        return session(u, ip, b["install"])
+
+    @app.post("/v1/kstrl/auth/logout")
+    def logout(req: Request):
+        row, e = require_key(req)
+        if row is not None and row.get("user_id"):
+            store.set(row["hash"], revoked=1)
+        return Response(status_code=204)
+
     @app.get("/v1/kstrl/account")
     def account(req: Request):
         row, e = require_key(req)
@@ -81,7 +148,7 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
         if row is None:
             return {"name": "", "email": "", "plan": "max", "usage": {"used": 0, "limit": 50000, "resetsAt": next_reset_ms()}}
         return {"name": row["name"] or "", "email": row["email"] or "", "plan": row["plan"],
-                "usage": {"used": round(store.used(row["hash"]), 1), "limit": store.limit(row), "resetsAt": next_reset_ms()}}
+                "usage": {"used": round(store.used(row["usage_id"]), 1), "limit": store.limit(row), "resetsAt": next_reset_ms()}}
 
     crash_count: dict[str, list[float]] = {}
 
@@ -107,7 +174,7 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
         row, e = require_key(req)
         if e:
             return e
-        if row is not None and store.used(row["hash"]) >= store.limit(row):
+        if row is not None and store.used(row["usage_id"]) >= store.limit(row):
             return err(429, "usage_limit", "Daily usage limit reached")
         try:
             body = await req.json()
@@ -154,7 +221,7 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
 
         def bill(ev):
             if row is not None:
-                store.add_usage(row["hash"], credits(ev["prompt_tokens"], ev["completion_tokens"], kmodel, mode))
+                store.add_usage(row["usage_id"], credits(ev["prompt_tokens"], ev["completion_tokens"], kmodel, mode))
 
         def chunk(delta, finish=None):
             return "data: " + json.dumps({"id": cid, "object": "chat.completion.chunk", "created": created, "model": model_name,

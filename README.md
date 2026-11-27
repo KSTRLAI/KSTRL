@@ -14,6 +14,11 @@ Effort levels: **Flash · Normal · High · Max · UltraCode**.
 
 Modes: **Build** (edits files and runs commands), **Plan** (brainstorm and plan, read-only, on Colossus 2.1) and **Ask** (read-only answers).
 
+## Features added in 1.7
+
+- **Context compactor** — long tasks fit in a small context window (12k tokens by default, Settings → Agents → Context Window). Old tool output is trimmed and earlier work is summarised, so even big jobs run on small local models.
+- **Sign up / Log in screen** — create an account or log in right in the app (no website). The account menu and sidebar show your email.
+
 ## Features added in 1.5
 
 - **Log in with kstrlsi:** one click if you're already logged in on the website (a `kstrl://` link back into the app). Plan and daily usage come from your server. See `docs/website-login.md` for the website and server contract.

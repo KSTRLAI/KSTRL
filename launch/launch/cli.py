@@ -10,10 +10,15 @@
   launch keys plan <key|prefix|install_id> free|max
   launch keys revoke <key|prefix|install_id>
   launch keys ban <key|prefix|install_id>
+  launch users list                  accounts made from KSTRL's sign-up screen
+  launch users plan <email> free|max
+  launch users ban <email>
+  (add --json to list commands for machine-readable output)
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -28,9 +33,12 @@ def cmd_pull(a):
     print(f"Done: {path}")
 
 
-def cmd_list(_a):
+def cmd_list(a):
     from .hub import installed
     ms = installed()
+    if a.json:
+        print(json.dumps([{**m, "path": str(m["path"])} for m in ms]))
+        return
     if not ms:
         print("No models yet. Try: launch pull Qwen/Qwen2.5-Coder-1.5B-Instruct")
     for m in ms:
@@ -91,6 +99,11 @@ def cmd_keys(a):
         print("Save it now — Launch only stores a hash of manually created keys.", file=sys.stderr)
         return
     if a.action == "list":
+        if a.json:
+            print(json.dumps([{"prefix": r["prefix"], "plan": r["plan"], "state": "banned" if r["banned"] else "revoked" if r["revoked"] else "active",
+                               "used": round(r["used"], 1), "name": r["name"] or "", "email": r["email"] or "", "install": bool(r["install_id"]),
+                               "account": bool(r["user_id"]), "created": r["created_at"]} for r in s.all()]))
+            return
         for r in s.all():
             state = "banned" if r["banned"] else "revoked" if r["revoked"] else "active"
             who = r["name"] or r["email"] or (f"install {r['install_id'][:8]}" if r["install_id"] else "")
@@ -108,12 +121,35 @@ def cmd_keys(a):
     print("Done.")
 
 
+def cmd_users(a):
+    from .store import Store
+    s = Store()
+    if a.action == "list":
+        rows = [{"email": u["email"], "name": u["name"], "plan": u["plan"], "banned": bool(u["banned"]), "used": round(u["used"], 1), "created": u["created_at"]} for u in s.users()]
+        if a.json:
+            print(json.dumps(rows))
+            return
+        if not rows:
+            print("No accounts yet.")
+        for u in rows:
+            print(f"{u['email']:40} {u['plan']:4} {'banned' if u['banned'] else 'active':7} {u['used']:>8.1f} credits today  {u['name']}")
+        return
+    u = s.user(a.email)
+    if not u:
+        sys.exit(f"No account with email {a.email}")
+    if a.action == "plan":
+        s.set_user(u["id"], plan=a.value)
+    elif a.action == "ban":
+        s.set_user(u["id"], banned=1)
+    print("Done.")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="launch", description="Launch: local AI runner with the Launch engine.")
     p.add_argument("--version", action="version", version=f"launch {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("pull", help="download a model from Hugging Face"); s.add_argument("repo"); s.add_argument("--token"); s.set_defaults(fn=cmd_pull)
-    s = sub.add_parser("list", help="downloaded models"); s.set_defaults(fn=cmd_list)
+    s = sub.add_parser("list", help="downloaded models"); s.add_argument("--json", action="store_true"); s.set_defaults(fn=cmd_list)
     s = sub.add_parser("rm", help="delete a model"); s.add_argument("model"); s.set_defaults(fn=cmd_rm)
     for name, fn in (("run", cmd_run), ("serve", cmd_serve)):
         s = sub.add_parser(name)
@@ -126,17 +162,23 @@ def main(argv=None):
             s.add_argument("--host", default="127.0.0.1")
             s.add_argument("--port", type=int, default=8000)
             s.add_argument("--no-auth", action="store_true", help="no API keys (only for use on this PC)")
-        s.add_argument("--ctx", type=int, default=8192, help="context length in tokens")
+        s.add_argument("--ctx", type=int, default=16384, help="context length in tokens")
         s.add_argument("--device", help="cuda, mps or cpu (default: best available)")
         s.set_defaults(fn=fn)
     s = sub.add_parser("keys", help="manage API keys")
     ks = s.add_subparsers(dest="action", required=True)
     c = ks.add_parser("create"); c.add_argument("--plan", default="free", choices=["free", "max"]); c.add_argument("--name"); c.add_argument("--email")
-    ks.add_parser("list")
+    ks.add_parser("list").add_argument("--json", action="store_true")
     c = ks.add_parser("plan"); c.add_argument("ref"); c.add_argument("value", choices=["free", "max"])
     c = ks.add_parser("revoke"); c.add_argument("ref")
     c = ks.add_parser("ban"); c.add_argument("ref")
     s.set_defaults(fn=cmd_keys)
+    s = sub.add_parser("users", help="manage accounts")
+    us = s.add_subparsers(dest="action", required=True)
+    us.add_parser("list").add_argument("--json", action="store_true")
+    c = us.add_parser("plan"); c.add_argument("email"); c.add_argument("value", choices=["free", "max"])
+    c = us.add_parser("ban"); c.add_argument("email")
+    s.set_defaults(fn=cmd_users)
     a = p.parse_args(argv)
     try:
         a.fn(a)

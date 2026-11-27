@@ -107,11 +107,60 @@ async function ensureKey() {
   return registering;
 }
 
+// ---- KSTRL's own sign-up / log-in screen ----
+//   POST {api}/v1/kstrl/auth/signup  { name, email, password, install_id } → { key, name, email, plan }
+//   POST {api}/v1/kstrl/auth/login   { email, password, install_id }       → { key, name, email, plan }
+// The password goes straight to the API over the network and is never stored by KSTRL; only the returned key is (encrypted).
+async function account(kind, { name = '', email = '', password = '', url = '' } = {}) {
+  const s = settings.load();
+  email = String(email).trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { ok: false, error: 'Enter a valid email address.' };
+  if (!password) return { ok: false, error: 'Enter your password.' };
+  if (kind === 'signup' && String(password).length < 8) return { ok: false, error: 'Use a password with at least 8 characters.' };
+  const apiUrl = settings.getUnsloth().url || String(url || '').trim();
+  if (!apiUrl) return { ok: false, error: 'Enter the KSTRL server address.', needsUrl: true };
+  let base;
+  try { base = oai.normalizeBase(apiUrl); } catch { return { ok: false, error: 'That server address isn\'t valid.', needsUrl: true }; }
+  let installId = s.installId;
+  if (!installId) { installId = crypto.randomUUID(); settings.update({ installId }); }
+  let res;
+  try {
+    res = await fetch(`${base}/kstrl/auth/${kind === 'signup' ? 'signup' : 'login'}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ name: String(name).trim().slice(0, 80), email, password: String(password), install_id: installId }),
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch { return { ok: false, error: 'Couldn\'t reach the KSTRL server. Check your connection and try again.', needsUrl: !settings.getUnsloth().url }; }
+  let j = null;
+  try { j = await res.json(); } catch {}
+  if (!res.ok) {
+    if (res.status === 404 || res.status === 405) return { ok: false, error: 'This server doesn\'t support KSTRL accounts yet.' };
+    return { ok: false, error: (j && j.error && (j.error.message || j.error)) || `Server error (${res.status})`, code: j && j.error && j.error.code };
+  }
+  if (!j || typeof j.key !== 'string' || !j.key.trim()) return { ok: false, error: 'The server didn\'t send a key.' };
+  settings.update({
+    provider: 'unsloth',
+    unslothKey: j.key.trim(),
+    ...(settings.getUnsloth().url ? {} : { unslothURL: apiUrl }),
+    account: { name: String(j.name || name || ''), email: String(j.email || email), plan: j.plan === 'max' ? 'max' : 'free', usage: null, source: 'login', auto: false, fetchedAt: 0 },
+  });
+  await refresh();
+  notify();
+  return { ok: true, account: settings.load().account };
+}
+
 function logout() {
   pending = null;
+  const { url, key } = settings.getUnsloth();
+  const acct = settings.load().account;
+  if (url && key && acct && !acct.auto) { // end the session on the server too (best effort)
+    try { fetch(`${oai.normalizeBase(url)}/kstrl/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(5000) }).catch(() => {}); } catch {}
+  }
   settings.update({ unslothKey: '', account: null });
   notify();
+  setTimeout(() => ensureKey().catch(() => {}), 500); // fall back to this install's automatic Free key
   return true;
 }
 
-module.exports = { init, login, handleUrl, refresh, logout, ensureKey, SITE };
+module.exports = { init, login, handleUrl, refresh, logout, ensureKey, signup: (a) => account('signup', a), signin: (a) => account('login', a), SITE };

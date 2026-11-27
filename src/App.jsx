@@ -8,7 +8,7 @@ import TerminalPanel from './components/TerminalPanel.jsx';
 import ChatView, { Popover, MODES, nextMode } from './components/ChatView.jsx';
 import HomeSidebar from './components/HomeSidebar.jsx';
 import Palette from './components/Palette.jsx';
-import { DiffModal, InputDialog, ConnectApiDialog } from './components/Modals.jsx';
+import { DiffModal, InputDialog, AuthScreen } from './components/Modals.jsx';
 import IdeWelcome from './components/IdeWelcome.jsx';
 import GitPanel from './components/GitPanel.jsx';
 import SkillsPage from './components/SkillsPage.jsx';
@@ -288,8 +288,14 @@ export default function App() {
   }, [workspace, info, toast, updateSettings]);
   useAutomationScheduler(IDE ? NO_AUTOMATIONS : settings, runAutomation); // only the home window runs automations
 
-  // Connect API: send people to kstrlsi for a key, then let them paste it in.
-  const connectApi = useCallback(() => { api.auth.login(); setConnectOpen('waiting'); }, []);
+  // Log in / Sign up: KSTRL's own screen (no website).
+  const connectApi = useCallback((tab) => setConnectOpen(tab === 'signup' ? 'signup' : 'login'), []);
+  // First launch: offer the sign-up screen once (home window only). Automatic Free keys keep the app usable if they skip it.
+  useEffect(() => {
+    if (IDE || !settings || settings.configured === undefined || settings.authPrompted || settings.loggedIn || settings.provider === 'anthropic') return;
+    updateSettings({ authPrompted: true });
+    setConnectOpen('signup');
+  }, [settings?.authPrompted]); // eslint-disable-line
 
   // .kstrl/rules.md: create it with a starter template if needed, then open it in the IDE.
   const editProjectRules = useCallback(async () => {
@@ -664,7 +670,7 @@ export default function App() {
         </Popover>
       )}
       {palette && <Palette mode={palette} files={files} commands={commands} onClose={() => setPalette(null)} onOpenFile={openFile} />}
-      {connectOpen && <ConnectApiDialog settings={settings} waiting={connectOpen === 'waiting'} onClose={() => setConnectOpen(false)} onConnected={(s) => { setSettings(s); toast(s.account?.name ? `Logged in as ${s.account.name}` : 'Connected — you’re ready to chat'); }} />}
+      {connectOpen && <AuthScreen settings={settings} initial={connectOpen} onClose={() => setConnectOpen(false)} onDone={(a, how) => toast(how === 'key' ? 'Connected — you’re ready to chat' : how === 'signup' ? `Welcome to KSTRL, ${a?.name || a?.email}` : `Logged in as ${a?.email}`)} />}
       {dialog && <InputDialog {...dialog} onClose={() => setDialog(null)} onError={(e) => toast(cleanErr(e))} />}
       {diff && <DiffModal diff={diff} onClose={() => setDiff(null)} onOpenFile={openFile} />}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast glass-strong">{t.text}</div>)}</div>

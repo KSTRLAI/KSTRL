@@ -30,6 +30,8 @@ const DEFAULTS = {
   customInstructions: '',
   // Workspace / UI
   maxSteps: 60,
+  authPrompted: false, // the Sign up screen was shown once on first launch
+  contextWindow: 12000, // tokens; the compactor keeps every request inside this (0 = off)
   // Models
   enabledModels: null, // null = all
   // Workspace / UI

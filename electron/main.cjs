@@ -196,6 +196,8 @@ handle('skills:list', () => require('./skills.cjs').all(settings.load()));
 handle('auth:login', () => auth.login());
 handle('auth:logout', () => auth.logout());
 handle('auth:refresh', () => auth.refresh());
+handle('auth:signup', (a) => auth.signup(a || {}));
+handle('auth:signin', (a) => auth.signin(a || {}));
 
 // kstrl://auth?… links from the website (login). Windows passes them in argv; macOS uses open-url.
 async function handleDeepLink(url) {

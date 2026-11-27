@@ -161,7 +161,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
   // Data-driven sections so search can find any row.
   const sections = [
     { tab: 'general', title: null, rows: [
-      { t: 'Account', d: settings.loggedIn ? [settings.account?.name, settings.account?.email].filter(Boolean).join(' · ') || 'Logged in' : settings.account?.expired ? 'Your login expired' : 'Not logged in', c: settings.loggedIn
+      { t: 'Account', d: settings.loggedIn ? [settings.account?.email, settings.account?.name].filter(Boolean).join(' · ') || 'Logged in' : settings.account?.expired ? 'Your login expired' : 'Not logged in', c: settings.loggedIn
         ? <button className="btn" onClick={() => api.auth.logout()}>Log Out</button>
         : <button className="btn light" onClick={() => onLogin?.()}>Log In</button> },
       { t: 'Plan', d: settings.usageToday?.plan === 'max' ? 'KSTRL MAX' : 'KSTRL Free', c: <button className="btn" onClick={() => setTab('plan')}>Manage</button> },
@@ -203,6 +203,7 @@ export default function SettingsPage({ info, settings, onChange, onBack, initial
       { t: 'Default Mode', d: 'Build edits files and runs commands; Plan brainstorms on Colossus 2.1; Ask only reads and answers', c: <Select value={settings.mode || 'build'} options={(info?.modes || []).map((m) => [m.id, m.name])} onChange={set('mode')} /> },
       { t: 'Default Effort', d: 'How hard Kestrel works on each request', c: <Select value={settings.effort || 'normal'} options={(info?.efforts || []).map((e) => [e.id, e.name])} onChange={set('effort')} /> },
       { t: 'Max Steps per Request', d: 'Kestrel stops after this many model turns in one request', c: <Stepper value={settings.maxSteps || 60} min={5} max={500} onChange={set('maxSteps')} /> },
+      { t: 'Context Window', d: 'Long tasks are compacted (old tool output trimmed, earlier work summarised) so every request fits in this many tokens', c: <Select value={String(settings.contextWindow ?? 12000)} options={[['8000', '8k'], ['12000', '12k'], ['16000', '16k'], ['32000', '32k'], ['64000', '64k'], ['128000', '128k'], ['0', 'Off']]} onChange={(v) => set('contextWindow')(Number(v))} /> },
     ] },
     { tab: 'agents', title: 'Safety', rows: [
       { t: 'Auto-run Commands', d: 'Let Kestrel run terminal commands without asking first. Off by default.', c: <Toggle on={!!settings.autoRunCommands} onChange={set('autoRunCommands')} /> },
