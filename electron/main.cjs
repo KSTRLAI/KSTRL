@@ -9,6 +9,7 @@ const { MODELS, EFFORTS, MODES, PLANS } = require('./models.cjs');
 const { spawn } = require('node:child_process');
 const updater = require('./updater.cjs');
 const auth = require('./auth.cjs');
+const gitOps = require('./git.cjs');
 
 const isDev = !!process.env.KSTRL_DEV;
 let win = null; // Agents home window
@@ -165,6 +166,25 @@ handle('chats:save', (kind, data) => {
   fs.writeFileSync(f + '.tmp', JSON.stringify(data));
   fs.renameSync(f + '.tmp', f);
   return true;
+});
+
+handle('git:status', () => gitOps.status());
+handle('git:diff', (p, staged) => gitOps.diff(p, staged));
+handle('git:stage', (list) => gitOps.stage(list).then(() => gitOps.status()));
+handle('git:unstage', (list) => gitOps.unstage(list).then(() => gitOps.status()));
+handle('git:discard', (list) => gitOps.discard(list).then(() => gitOps.status()));
+handle('git:commit', (msg) => gitOps.commit(msg));
+handle('git:push', () => gitOps.push());
+handle('git:pull', () => gitOps.pull());
+handle('git:init', () => gitOps.init());
+handle('git:message', async () => {
+  const diff = await gitOps.diffForMessage();
+  if (!diff.trim()) throw new Error('There are no changes to describe.');
+  const text = await agent.quick({
+    system: 'Write a git commit message for the diff. First line: imperative summary under 72 characters. If the change is large, add a blank line and up to 5 short bullet points. Reply with only the commit message.',
+    user: diff, modelId: 'colossus-2.1', mode: 'commit', maxTokens: 300,
+  });
+  return text.replace(/^```\w*\n?|```$/g, '').trim();
 });
 
 handle('auth:login', () => auth.login());

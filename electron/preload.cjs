@@ -12,7 +12,10 @@ contextBridge.exposeInMainWorld('kstrl', {
   settings: { get: invoke('settings:get'), update: invoke('settings:update'), onChanged: on('settings:changed') },
   workspace: { pick: invoke('workspace:pick'), open: invoke('workspace:open'), current: invoke('workspace:current'), close: invoke('workspace:close'), onChanged: on('workspace:changed') },
   windows: { openIde: invoke('window:openIde'), idePending: invoke('window:idePending'), focusHome: invoke('window:focusHome') },
-  git: { clone: invoke('git:clone') },
+  git: {
+    clone: invoke('git:clone'), status: invoke('git:status'), diff: invoke('git:diff'), stage: invoke('git:stage'), unstage: invoke('git:unstage'),
+    discard: invoke('git:discard'), commit: invoke('git:commit'), push: invoke('git:push'), pull: invoke('git:pull'), init: invoke('git:init'), message: invoke('git:message'),
+  },
   auth: { login: invoke('auth:login'), logout: invoke('auth:logout'), refresh: invoke('auth:refresh') },
   chats: { load: invoke('chats:load'), save: invoke('chats:save') },
   fs: {

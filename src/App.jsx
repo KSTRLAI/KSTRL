@@ -10,6 +10,7 @@ import HomeSidebar from './components/HomeSidebar.jsx';
 import Palette from './components/Palette.jsx';
 import { DiffModal, InputDialog, ConnectApiDialog } from './components/Modals.jsx';
 import IdeWelcome from './components/IdeWelcome.jsx';
+import GitPanel from './components/GitPanel.jsx';
 import SettingsPage from './components/SettingsPage.jsx';
 import AutomationsPage, { useAutomationScheduler } from './components/Automations.jsx';
 import { resolveModel, modelLabel, runLabel } from './components/ModelPicker.jsx';
@@ -130,6 +131,18 @@ export default function App() {
   useEffect(() => { if (IDE) { document.title = 'KSTRL'; document.body.style.background = '#1b1b1b'; } }, []);
 
   useEffect(() => { setAutocomplete(settings.tabAutocomplete); }, [settings.tabAutocomplete]);
+
+  // Changed-file count for the Source Control badge (IDE window).
+  const [gitCount, setGitCount] = useState(0);
+  useEffect(() => {
+    if (!IDE || !workspace) { setGitCount(0); return undefined; }
+    let t;
+    const check = () => api.git.status().then((st) => setGitCount(st?.repo ? st.files.length : 0)).catch(() => setGitCount(0));
+    check();
+    const off = api.fs.onTree(() => { clearTimeout(t); t = setTimeout(check, 1200); });
+    window.addEventListener('focus', check);
+    return () => { off(); clearTimeout(t); window.removeEventListener('focus', check); };
+  }, [workspace]);
 
   // Appearance
   useEffect(() => { document.documentElement.style.zoom = String((settings.uiScale || 100) / 100); }, [settings.uiScale]);
@@ -286,6 +299,7 @@ export default function App() {
     if (c.file) openFile(c.file, c.line);
     if (c.action === 'search') { setView('search'); setSearchFocus((n) => n + 1); }
     if (c.action === 'explorer') setView('explorer');
+    if (c.action === 'git') setView('git');
     if (c.action === 'terminal') setPanelOpen(true);
     if (c.action === 'agent') { setAgentOpen(true); setTimeout(() => agentRef.current?.focus(), 60); }
   };
@@ -319,6 +333,7 @@ export default function App() {
     { id: 'closefolder', label: 'File: Close Folder', run: closeFolder },
     { id: 'quick', label: 'Go to File…', kbd: 'Ctrl+P', run: () => setPalette('files') },
     { id: 'search', label: 'Search: Find in Files', kbd: 'Ctrl+Shift+F', run: () => (IDE ? (setView('search'), setSearchFocus((n) => n + 1)) : goIde({ action: 'search' })) },
+    { id: 'git', label: 'View: Source Control', kbd: 'Ctrl+Shift+G', run: () => (IDE ? setView('git') : goIde({ action: 'git' })) },
     { id: 'explorer', label: 'View: Show Explorer', kbd: 'Ctrl+Shift+E', run: () => (IDE ? setView('explorer') : goIde({ action: 'explorer' })) },
     { id: 'sidebar', label: 'View: Toggle Sidebar', kbd: 'Ctrl+B', run: () => (mainView === 'home' ? setHomeSide((v) => !v) : setView((v) => (v ? null : 'explorer'))) },
     { id: 'terminal', label: 'View: Toggle Terminal', kbd: 'Ctrl+`', run: () => (IDE ? setPanelOpen((o) => !o) : goIde({ action: 'terminal' })) },
@@ -352,6 +367,7 @@ export default function App() {
         [!e.shiftKey && k === 'p', 'quick'],
         [e.shiftKey && k === 'f', 'search'],
         [e.shiftKey && k === 'e', 'explorer'],
+        [e.shiftKey && k === 'g', 'git'],
         [e.shiftKey && k === 'h', 'home'],
         [!e.shiftKey && !e.altKey && k === 'e', 'ide'],
         [!e.shiftKey && !e.altKey && k === 'b', 'sidebar'],
@@ -530,6 +546,7 @@ export default function App() {
           {workspace && <div className="activitybar glass-pane">
             <button className={'act' + (view === 'explorer' ? ' active' : '')} title="Explorer (Ctrl+Shift+E)" onClick={() => setView((v) => (v === 'explorer' ? null : 'explorer'))}><Files size={20} /></button>
             <button className={'act' + (view === 'search' ? ' active' : '')} title="Search (Ctrl+Shift+F)" onClick={() => { setView((v) => (v === 'search' ? null : 'search')); setSearchFocus((n) => n + 1); }}><Search size={20} /></button>
+            <button className={'act' + (view === 'git' ? ' active' : '')} title="Source Control (Ctrl+Shift+G)" onClick={() => setView((v) => (v === 'git' ? null : 'git'))}><GitBranch size={20} />{gitCount > 0 && <span className="badge">{gitCount > 99 ? '99+' : gitCount}</span>}</button>
             <button className={'act' + (agentOpen ? ' active' : '')} title="Kestrel Agent (Ctrl+I)" onClick={() => setAgentOpen((o) => !o)}><Bot size={20} /></button>
             <button className={'act' + (panelOpen ? ' active' : '')} title="Terminal (Ctrl+`)" onClick={() => setPanelOpen((o) => !o)}><TerminalSquare size={20} /></button>
             <div className="spacer" />
@@ -549,6 +566,8 @@ export default function App() {
                     onDeleted={(p) => tabs.filter((t) => t.path === p || t.path.startsWith(p + '/')).forEach((t) => { disposeDoc(t.path); setTabs((ts) => ts.filter((x) => x.path !== t.path)); if (active === t.path) setActive(null); })}
                     onRenamed={(from) => tabs.filter((t) => t.path === from || t.path.startsWith(from + '/')).forEach((t) => { disposeDoc(t.path); setTabs((ts) => ts.filter((x) => x.path !== t.path)); if (active === t.path) setActive(null); })}
                   />
+                ) : view === 'git' ? (
+                  <GitPanel workspace={workspace} onOpenDiff={setDiff} onToast={toast} />
                 ) : (
                   <SearchPanel workspace={workspace} onOpenAt={openFile} focusKey={searchFocus} />
                 )}
