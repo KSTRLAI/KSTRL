@@ -58,7 +58,8 @@ jobs:
         shell: bash
         env:
           API_URL: ${{ vars.KSTRL_API_URL }}
-        run: node -e "require('fs').writeFileSync('electron/build-config.json', JSON.stringify({ unslothURL: process.env.API_URL }))"
+        run: |
+          node -e "require('fs').writeFileSync('electron/build-config.json', JSON.stringify({ unslothURL: process.env.API_URL }))"
       - run: npm run build
       - name: Build (and publish)
         shell: bash
@@ -104,7 +105,8 @@ jobs:
         if: vars.KSTRL_API_URL != ''
         env:
           API_URL: ${{ vars.KSTRL_API_URL }}
-        run: node -e "require('fs').writeFileSync('electron/build-config.json', JSON.stringify({ unslothURL: process.env.API_URL }))"
+        run: |
+          node -e "require('fs').writeFileSync('electron/build-config.json', JSON.stringify({ unslothURL: process.env.API_URL }))"
       - run: npm run build
       - name: Build (and publish)
         env:
