@@ -9,13 +9,14 @@ import json
 import os
 import re
 import shutil
+import time
 import subprocess
 import sys
 import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 PY_VERSION = "3.12.10"
 PY_EMBED = f"https://www.python.org/ftp/python/{PY_VERSION}/python-{PY_VERSION}-embed-amd64.zip"
 GET_PIP = "https://bootstrap.pypa.io/get-pip.py"
@@ -115,9 +116,40 @@ def has_nvidia() -> str | None:
         return None
 
 
+def gpu_compute() -> float | None:
+    """CUDA compute capability of the first NVIDIA GPU (6.1 = GTX 10xx, 7.5 = RTX 20xx, 8.6 = RTX 30xx …)."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"], capture_output=True, text=True, timeout=15, creationflags=NO_WINDOW)
+        return float(out.stdout.strip().splitlines()[0]) if out.returncode == 0 and out.stdout.strip() else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+PROGRESS = re.compile(r"^Progress (\d+) of (\d+)$")
+
+
 def pip(*args: str):
-    cmd = [str(python_exe()), "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check", *args]
-    if stream(cmd, lambda t, prog: LOG("    " + t.strip(), prog)) != 0:
+    """pip install with live progress. pip hides its progress bar when it isn't in a terminal, so ask for
+    the raw form ("Progress <done> of <total>") and turn it into a percentage."""
+    cmd = [str(python_exe()), "-m", "pip", "install", "--no-warn-script-location", "--disable-pip-version-check", "--progress-bar", "raw", *args]
+    state = {"file": "", "last": 0.0}
+
+    def line(t, prog):
+        t = t.strip()
+        m = PROGRESS.match(t)
+        if m:
+            done, total = int(m.group(1)), int(m.group(2))
+            now = time.time()
+            if total and (now - state["last"] > 0.3 or done == total):
+                state["last"] = now
+                LOG(f"    downloading {state['file']} {done * 100 // total}% of {total / 1e6:.0f} MB", True)
+            return
+        if t.startswith("Downloading "):
+            parts = t.split()[1].rsplit("/", 1)[-1].split("-")
+            state["file"] = " ".join(parts[:2]) if len(parts) > 1 else parts[0][:40]
+        LOG("    " + t, prog)
+    code = stream(cmd, line)
+    if code != 0:
         raise RuntimeError("pip " + " ".join(args))
 
 
@@ -171,9 +203,16 @@ def cuda_works() -> bool:
     return False
 
 
-def install_torch(gpu: str | None, reinstall: bool = False) -> str:
+def install_torch(gpu: str | None, reinstall: bool = False, skip: str | None = None) -> str:
     """Install the first PyTorch build that actually runs on this PC. Returns its label (cu128 … or cpu)."""
-    for pkg, tag in (TORCH_GPU if gpu else []):
+    cc = gpu_compute() if gpu else None
+    cands = TORCH_GPU if gpu else []
+    if cc is not None and cc < 7.0:  # GTX 9xx/10xx: the newest CUDA 12.8 builds don't include these cards
+        say(f"  Your GPU is compute capability {cc} — skipping PyTorch builds that no longer support it.")
+        cands = [c for c in cands if c[1] != "cu128"]
+    if skip:  # the build that's installed now and just failed the GPU test
+        cands = [c for c in cands if not (c[0] == "torch" and c[1] == skip)]
+    for pkg, tag in cands:
         try:
             say(f"  installing PyTorch {pkg.replace('torch', '').lstrip('=') or 'latest'} for CUDA ({tag}) …")
             pip(pkg, "--index-url", f"https://download.pytorch.org/whl/{tag}", *(["--force-reinstall", "--no-deps"] if reinstall else []))
@@ -203,7 +242,7 @@ def setup(force: bool = False):
             try:
                 if not cuda_works():
                     say("Your GPU needs a different PyTorch build — downloading it (one time).")
-                    state["torch"] = install_torch(state["gpu"], reinstall=True)
+                    state["torch"] = install_torch(state["gpu"], reinstall=True, skip=state.get("torch"))
                 state["cuda_ok"] = True
                 MARKER.write_text(json.dumps(state))
             except Exception as e:  # noqa: BLE001 — keep the current runtime; the engine falls back to the CPU

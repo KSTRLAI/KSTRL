@@ -331,9 +331,10 @@ function renderOverlay() {
   let html = '';
   if (!st.ready) {
     html = `<div class="overlay"><div class="modal setup"><div class="head"><img src="/icon.png" alt=""><div><h3 style="margin:0">${st.error ? 'Setup didn’t finish' : 'Setting up Launch'}</h3><p>${st.error ? esc(st.error) : 'First run only: downloading Python and PyTorch for this PC. This can take a few minutes.'}</p></div></div>
-      ${st.error ? '' : `<div class="bar"><div style="width:${(st.progress.match(/(\d+)%/) || [0, 8])[1]}%"></div></div><p class="mono" style="font-size:12px">${esc(st.progress || 'Starting…')}</p>`}
+      ${st.error ? '' : `<div class="bar"><div style="width:${(st.progress.match(/(\d+)%/) || [0, 8])[1]}%"></div></div><p class="mono" style="font-size:12px">${esc(st.progress || 'Starting…')}</p>${st.idle > 20 ? `<p style="font-size:12px">Still working — big downloads and installs can go quiet for a few minutes (last update ${st.idle < 120 ? st.idle + 's' : Math.round(st.idle / 60) + ' min'} ago). Keep this window open.</p>` : ''}`}
       <pre class="log">${esc(st.log.slice(-40).map((l) => l.replace(/^\r/, '')).join('\n'))}</pre>
-      ${st.error ? '<div class="mrow"><button class="btn grad" data-act="reinstall">Try again</button></div>' : ''}</div></div>`;
+      ${st.error ? '<div class="mrow"><button class="btn grad" data-act="reinstall">Try again</button></div>' : ''}
+      ${u.available ? `<div class="row" style="padding:10px 0 0;border-top:1px solid var(--border)"><div class="txt"><div class="t" style="font-size:13.5px">Launch ${esc(u.available.version)} is available</div><div class="d">${u.busy ? esc(u.status) : u.error && updTried ? `<span class="err">${esc(u.error)}</span>` : 'You can update now — setup continues in the new version.'}</div></div>${u.busy ? '' : '<button class="btn grad" data-act="upd-apply">Update</button>'}</div>` : ''}</div></div>`;
   } else if (u.available && (updDismissed !== u.available.version || u.busy || (updTried && u.error))) {
     html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt="">
       <h3>${u.error && updTried ? 'The update didn’t work' : 'Update available'}</h3>

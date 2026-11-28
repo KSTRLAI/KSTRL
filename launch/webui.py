@@ -72,7 +72,13 @@ def bg(fn, *a):
 def do_setup(force=False):
     st = S["setup"]
     st.update(ready=False, error=None)
-    B.LOG = lambda msg, progress=False: (push(st["log"], msg, progress), st.__setitem__("progress", msg.strip()[:120]) if progress else None)
+    st["activity"] = time.time()
+
+    def log(msg, progress=False):
+        st["activity"] = time.time()
+        push(st["log"], msg, progress)
+        st["progress"] = msg.strip()[:120] if progress else (st["progress"] if st["progress"] and "%" in st["progress"] and msg.startswith("    ") else msg.strip()[:120])
+    B.LOG = log
     try:
         state = B.setup(force=force)
         B.install_app()
@@ -264,6 +270,7 @@ def state():
     s["setup"]["log"] = s["setup"]["log"][-80:]
     s["server"]["log"] = s["server"]["log"][-200:]
     s["version"] = B.VERSION
+    s["setup"]["idle"] = int(time.time() - S["setup"].get("activity", time.time()))
     s["cfg"] = {k: v for k, v in cfg().items() if k != "chat_key"}
     s["paths"] = {"base": str(B.BASE), "models": str(Path.home() / ".launch" / "models")}
     return s
