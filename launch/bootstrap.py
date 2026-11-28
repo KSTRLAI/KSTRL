@@ -15,7 +15,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 PY_VERSION = "3.12.10"
 PY_EMBED = f"https://www.python.org/ftp/python/{PY_VERSION}/python-{PY_VERSION}-embed-amd64.zip"
 GET_PIP = "https://bootstrap.pypa.io/get-pip.py"
@@ -213,8 +213,12 @@ def main():
             print(f"Something went wrong: {e}")
             sys.exit(1)
         return
-    import gui
-    gui.main(sys.modules[__name__])
+    if os.environ.get("LAUNCH_CLASSIC"):  # the old Tk window, kept as a fallback
+        import gui
+        gui.main(sys.modules[__name__])
+        return
+    import webui
+    webui.main(sys.modules[__name__])
 
 
 if __name__ == "__main__":

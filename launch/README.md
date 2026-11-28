@@ -8,7 +8,7 @@ A local AI runner with its own inference engine, the **Launch engine**. It downl
 
 Get **Launch.exe** from the KSTRL repo's Releases page (the `launch-v…` pre-release) and double-click it. The first run sets up Launch's own Python and PyTorch: the GPU version if you have an NVIDIA card (about 2.5 GB), otherwise the CPU version (about 250 MB). Everything goes in `%LOCALAPPDATA%\Launch`, and models in `%USERPROFILE%\.launch\models`.
 
-Double-clicking opens the Launch window with tabs for **Models** (download from Hugging Face, delete), **Server** (pick a model, port, context size, start/stop, copy the API URL for KSTRL), **Chat** (test the running model), **API keys** (create, MAX/Free, revoke), **Accounts** (people who signed up from KSTRL) and **Setup / log**. You can also run it from a terminal with the same commands as below, e.g. `Launch.exe serve Qwen/Qwen2.5-Coder-7B-Instruct --port 8000`.
+Double-clicking opens the Launch window, styled like KSTRL: **Models** (download from Hugging Face, delete), **Server** (pick a model, port, context size, start/stop, copy the API URL for KSTRL), **Chat** (test the running model), **API Keys**, **Accounts** (people who signed up from KSTRL) and **Settings** (updates, runtime, files). The window is a local web page shown in a Microsoft Edge app window; it's only reachable from this PC and needs a per-run token. Set `LAUNCH_CLASSIC=1` to get the old plain window. You can also run Launch from a terminal with the same commands as below, e.g. `Launch.exe serve Qwen/Qwen2.5-Coder-7B-Instruct --port 8000`.
 
 To build the exe yourself, run the **Build Launch** workflow on GitHub (Actions tab).
 

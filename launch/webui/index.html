@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Launch</title>
+<link rel="icon" href="/icon.png">
+<style>
+:root {
+  --bg: #0a0a0a; --side: rgba(7,7,7,.92); --pane-border: rgba(255,255,255,.08); --border: rgba(255,255,255,.08);
+  --text: #f5f5f5; --text-2: #a3a3a3; --text-3: #737373; --ok: #4ade80; --warn: #f5b45a; --err: #fca5a5;
+  --grad: linear-gradient(135deg, rgba(255,255,255,.96) 0%, rgba(255,214,214,.9) 28%, rgba(255,128,128,.9) 62%, rgba(255,61,61,.95) 100%);
+  --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  --sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Inter, 'Helvetica Neue', Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13.5px; overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+input, textarea, select { font: inherit; color: inherit; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.16); }
+.orbs { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.orbs span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
+.orbs .o1 { width: 620px; height: 620px; left: -160px; top: -220px; background: radial-gradient(circle, rgba(255,255,255,.08), transparent 65%); }
+.orbs .o2 { width: 560px; height: 560px; right: -140px; bottom: -200px; background: radial-gradient(circle, rgba(255,90,90,.06), transparent 65%); }
+svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+
+/* layout */
+.app { display: flex; height: 100%; }
+.side { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--pane-border); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; }
+.brand img { width: 26px; height: 26px; border-radius: 7px; }
+.brand .n { font-size: 14px; font-weight: 700; letter-spacing: .32em; }
+.nav { padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
+.nav button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: 14px; color: #e5e5e5; text-align: left; }
+.nav button svg { color: var(--text-2); }
+.nav button:hover { background: rgba(255,255,255,.06); }
+.nav button.on { background: rgba(255,255,255,.08); color: #fff; }
+.nav button.on svg { color: #fff; }
+.nav .badge { margin-left: auto; font-size: 11px; color: var(--text-3); }
+.nav .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px rgba(74,222,128,.6); }
+.side-sec { padding: 18px 20px 6px; font-size: 12.5px; color: var(--text-3); }
+.side-foot { margin-top: auto; padding: 12px 14px 14px; border-top: 1px solid var(--pane-border); display: flex; flex-direction: column; gap: 10px; }
+.hw { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--text-2); }
+.hw .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.06); }
+.hw .v { color: var(--text-3); font-size: 11.5px; }
+.main { flex: 1; min-width: 0; overflow-y: auto; user-select: text; }
+.inner { width: min(860px, 100%); margin: 0 auto; padding: 34px 28px 60px; }
+.title { font-size: 22px; font-weight: 600; margin: 4px 0 4px 8px; }
+.subtitle { font-size: 13.5px; color: var(--text-2); margin: 0 0 22px 8px; }
+.sec { margin-bottom: 26px; }
+.sec-t { font-size: 14px; color: var(--text-2); margin: 0 0 10px 8px; display: flex; align-items: center; justify-content: space-between; }
+.card { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.07); border-radius: 14px; backdrop-filter: blur(20px) saturate(150%); overflow: hidden; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 16px; border-top: 1px solid rgba(255,255,255,.06); }
+.row:first-child { border-top: 0; }
+.row.col { flex-direction: column; align-items: stretch; gap: 10px; }
+.txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.txt .t { font-size: 14.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.txt .d { font-size: 13px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+.acts { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.mono { font-family: var(--mono); }
+.muted { color: var(--text-3); }
+.empty { padding: 26px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+.ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
+
+/* controls */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: var(--text); white-space: nowrap; }
+.btn:hover { background: rgba(255,255,255,.11); }
+.btn:disabled { opacity: .45; pointer-events: none; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.btn.light { background: #f5f5f5; color: #0c0c0c; border-color: #f5f5f5; font-weight: 600; }
+.btn.light:hover { background: #fff; }
+.btn.danger:hover { color: var(--err); }
+.grad { position: relative; overflow: hidden; background: var(--grad) !important; color: #2a0606 !important; border: 1px solid rgba(255,255,255,.6) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(140,0,0,.28), 0 8px 26px -8px rgba(255,61,61,.6); font-weight: 600; }
+.grad:hover { filter: brightness(1.05) saturate(1.1); }
+.input { width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.12); outline: none; font-size: 13px; }
+.input:focus { border-color: rgba(255,255,255,.32); }
+.input::placeholder, textarea::placeholder { color: var(--text-3); }
+select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+select.input option { background: #1b1b1b; }
+.sm { width: 120px; }
+.md { width: 260px; }
+.toggle { width: 36px; height: 20px; border-radius: 999px; background: rgba(255,255,255,.16); position: relative; flex-shrink: 0; transition: background .15s; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s, background .15s; }
+.toggle.on { background: #f5f5f5; }
+.toggle.on::after { transform: translateX(16px); background: #0c0c0c; }
+.seg { display: flex; padding: 3px; border-radius: 10px; gap: 3px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
+.seg button { height: 26px; padding: 0 12px; border-radius: 7px; color: var(--text-2); font-size: 12.5px; border: 1px solid transparent; }
+.seg button.on { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.12); }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--border); background: rgba(255,255,255,.04); color: var(--text-2); }
+.pill.max { color: #f6e3a8; border-color: rgba(246,227,168,.35); }
+.pill.on { color: var(--ok); border-color: rgba(74,222,128,.3); }
+.pill.bad { color: var(--err); border-color: rgba(252,165,165,.3); }
+.log { margin: 0; padding: 12px 14px; max-height: 320px; min-height: 140px; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.55; color: #d4d4d4; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,.25); }
+.bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.bar > div { height: 100%; background: linear-gradient(90deg, #ef4444, #f97316); transition: width .3s; }
+.status-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
+.sdot.on { background: var(--ok); box-shadow: 0 0 10px rgba(74,222,128,.6); }
+.sdot.busy { background: var(--warn); }
+.copyable { display: flex; gap: 8px; align-items: center; }
+.newkey { border: 1px dashed rgba(255,255,255,.18); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; word-break: break-all; background: rgba(0,0,0,.25); user-select: all; }
+
+/* chat */
+.chat { display: flex; flex-direction: column; height: 100%; }
+.msgs { flex: 1; overflow-y: auto; }
+.msgs .inner { padding-top: 26px; }
+.msg { margin: 0 8px 22px; }
+.who { font-size: 12.5px; color: var(--text-3); margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
+.who img { width: 15px; height: 15px; border-radius: 4px; }
+.bubble { display: inline-block; max-width: 100%; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); white-space: pre-wrap; line-height: 1.55; font-size: 14px; }
+.reply { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: #ececec; }
+.reply pre { white-space: pre; overflow-x: auto; background: rgba(0,0,0,.35); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; }
+.reply code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 5px; }
+.reply pre code { background: none; padding: 0; }
+.composer-wrap { padding: 0 28px 22px; }
+.composer { width: min(800px, 100%); margin: 0 auto; border-radius: 18px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.11); box-shadow: 0 18px 50px -22px rgba(0,0,0,.8); padding: 12px 12px 10px 16px; }
+.composer textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; font-size: 14px; line-height: 1.5; min-height: 44px; max-height: 200px; }
+.composer .cbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.send { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
+.chat-foot { text-align: center; font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
+.dots { display: inline-flex; gap: 5px; padding: 8px 0; }
+.dots span { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: dot 1.2s infinite ease-in-out; }
+.dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+/* overlays */
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); }
+.modal { width: min(420px, 92vw); padding: 26px 26px 20px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; background: rgba(27,27,27,.92); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 30px 80px -30px rgba(0,0,0,.9), inset 0 1px rgba(255,255,255,.08); }
+.modal img { width: 48px; height: 48px; border-radius: 12px; }
+.modal h3 { margin: 6px 0 0; font-size: 18px; font-weight: 600; }
+.modal p { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.modal .bar { width: 100%; margin-top: 8px; }
+.modal .mrow { display: flex; gap: 8px; margin-top: 12px; width: 100%; justify-content: center; }
+.modal .mrow .btn { min-width: 110px; height: 34px; }
+.setup { width: min(520px, 92vw); align-items: stretch; text-align: left; }
+.setup .head { display: flex; gap: 12px; align-items: center; }
+.setup .log { max-height: 220px; min-height: 120px; border-radius: 10px; border: 1px solid var(--border); }
+.toast-wrap { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+.toast { padding: 10px 14px; border-radius: 10px; font-size: 13px; background: rgba(27,27,27,.94); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 40px -16px rgba(0,0,0,.8); animation: tin .18s ease-out; }
+.toast.bad { border-color: rgba(252,165,165,.35); }
+@keyframes tin { from { opacity: 0; transform: translateY(6px); } }
+</style>
+</head>
+<body>
+<div class="orbs"><span class="o1"></span><span class="o2"></span></div>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><img src="/icon.png" alt=""><span class="n">LAUNCH</span></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div id="upd"></div>
+      <div class="hw"><div class="ic" id="hwic"></div><div><div id="hwname">Setting up…</div><div class="v" id="ver"></div></div></div>
+    </div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div id="overlay"></div>
+<div class="toast-wrap" id="toasts"></div>
+<script>
+const TOKEN = '__TOKEN__';
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const I = {
+  models: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  keys: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  down: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+  folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>',
+  loader: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>',
+};
+const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${I[n]}</svg>`;
+const SUGGEST = ['Qwen/Qwen2.5-Coder-1.5B-Instruct', 'Qwen/Qwen2.5-Coder-7B-Instruct', 'unsloth/gemma-3-1b-it', 'google/gemma-3-1b-it', 'Qwen/Qwen3-4B', 'Qwen/Qwen3-8B', 'meta-llama/Llama-3.2-3B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3'];
+const PAGES = [['models', 'Models', 'models'], ['server', 'Server', 'server'], ['chat', 'Chat', 'chat'], ['keys', 'API Keys', 'keys'], ['users', 'Accounts', 'users'], ['settings', 'Settings', 'settings']];
+
+let S = null, page = 'models', lists = { models: null, keys: null, users: null }, newKey = null, keyForm = false;
+let chat = [], streaming = null, updDismissed = null, updTried = false;
+const draft = {}; // server settings being edited (kept across re-renders)
+
+async function api(path, body) {
+  const r = await fetch('/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const j = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
+  if (!r.ok) throw new Error(j?.error || `Error ${r.status}`);
+  return j;
+}
+function toast(text, bad) {
+  const el = document.createElement('div'); el.className = 'toast' + (bad ? ' bad' : ''); el.textContent = text;
+  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3800);
+}
+const act = async (fn, okMsg) => { try { const r = await fn(); if (okMsg) toast(okMsg); return r; } catch (e) { toast(e.message, true); } };
+async function load(kind) { try { lists[kind] = await api(kind); } catch (e) { lists[kind] = { error: e.message }; } render(); }
+
+// ---------- shell ----------
+function renderNav() {
+  const sv = S?.server || {};
+  $('#nav').innerHTML = PAGES.map(([id, label, ic]) => `<button class="${page === id ? 'on' : ''}" data-go="${id}">${icon(ic)}${label}${id === 'server' && sv.running ? '<span class="dot"></span>' : ''}${id === 'models' && Array.isArray(lists.models) && lists.models.length ? `<span class="badge">${lists.models.length}</span>` : ''}</button>`).join('');
+  $('#hwic').innerHTML = icon('cpu');
+  $('#hwname').textContent = S?.setup.ready ? S.setup.hw : S?.setup.error ? 'Setup failed' : 'Setting up…';
+  $('#ver').textContent = S ? `Launch ${S.version}${S.setup.torch ? ' · PyTorch ' + S.setup.torch : ''}` : '';
+  const u = S?.update;
+  $('#upd').innerHTML = u?.available ? `<button class="btn grad" style="width:100%;height:32px" data-act="upd-open">${icon('up')} Update to ${esc(u.available.version)}</button>` : '';
+}
+function go(p) { page = p; if (['models', 'keys', 'users'].includes(p)) load(p); if (p === 'server' && !lists.models) load('models'); render(); if (p === 'chat') setTimeout(() => $('#prompt')?.focus(), 30); }
+
+// ---------- pages ----------
+function pageModels() {
+  const d = S.download, ms = lists.models;
+  return `<div class="inner">
+  <div class="title">Models</div><div class="subtitle">Download models from Hugging Face and run them with the Launch engine. Supported: Llama, Mistral, Qwen2, Qwen3 and Gemma 1/2/3 (text).</div>
+  <div class="sec"><div class="sec-t">Download from Hugging Face</div><div class="card">
+    <div class="row col">
+      <div class="txt"><div class="t">Repository</div><div class="d">The model's id on huggingface.co, like owner/name. Pick one or type your own.</div></div>
+      <div style="display:flex;gap:8px"><input class="input mono" id="repo" list="sugg" placeholder="Qwen/Qwen2.5-Coder-7B-Instruct" value="${esc($('#repo')?.value || '')}"><datalist id="sugg">${SUGGEST.map((s) => `<option value="${s}">`).join('')}</datalist>
+      <button class="btn light" data-act="pull" ${d.busy ? 'disabled' : ''}>${d.busy ? icon('loader', 'spin') : icon('down')} Download</button></div>
+    </div>
+    <div class="row"><div class="txt"><div class="t">Hugging Face token <span class="muted" style="font-size:12px">optional</span></div><div class="d">Only for gated models (like google/gemma). Accept the model's license on its page first.</div></div><input class="input md" id="hftoken" type="password" placeholder="hf_…" value="${esc($('#hftoken')?.value || '')}"></div>
+    ${d.busy || d.error || d.done ? `<div class="row"><div class="txt"><div class="t">${d.busy ? `Downloading ${esc(d.repo)}` : d.error ? '<span class="err">Download failed</span>' : `<span class="ok">Downloaded ${esc(d.done)}</span>`}</div><div class="d mono" style="font-size:12px">${esc(d.busy ? d.line : d.error || 'Ready to use — pick it on the Server page.')}</div></div></div>` : ''}
+  </div></div>
+  <div class="sec"><div class="sec-t">Downloaded <button class="btn ghost" data-act="reload-models">${icon('refresh')}</button></div><div class="card">
+    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ms ? '<div class="empty">Loading…</div>' : ms.error ? `<div class="empty err">${esc(ms.error)}</div>` : !ms.length ? '<div class="empty">No models yet. Download one above — Qwen2.5-Coder-1.5B-Instruct is a quick start.</div>' :
+      ms.map((m) => `<div class="row"><div class="txt"><div class="t mono" style="font-size:13.5px">${esc(m.id)}</div><div class="d">${esc(m.arch)} · ${m.gb} GB${S.server.model === m.id && S.server.running ? ' · <span class="ok">running</span>' : ''}</div></div>
+        <div class="acts"><button class="btn" data-act="use" data-id="${esc(m.id)}">${icon('play')} Use</button><button class="btn ghost danger" data-act="rm" data-id="${esc(m.id)}" title="Delete">${icon('trash')}</button></div></div>`).join('')}
+  </div></div></div>`;
+}
+function pageServer() {
+  const sv = S.server, ms = Array.isArray(lists.models) ? lists.models : [];
+  const c = { ...S.cfg, ...draft };
+  const model = (sv.running || sv.starting ? sv.model : draft.model) || c.model || ms[0]?.id || '';
+  const busy = sv.starting, on = sv.running;
+  const url = sv.url || `http://127.0.0.1:${c.port || 8000}/v1`;
+  return `<div class="inner">
+  <div class="title">Server</div><div class="subtitle">An OpenAI-compatible API for KSTRL and other apps.</div>
+  <div class="sec"><div class="card">
+    <div class="row"><div class="status-line"><span class="sdot ${on ? 'on' : busy ? 'busy' : ''}"></span>${on ? `Running <span class="mono" style="color:var(--text)">${esc(sv.model)}</span>` : busy ? `Loading ${esc(sv.model)}…` : sv.error ? `<span class="err">${esc(sv.error)}</span>` : 'Stopped'}</div>
+      ${on || busy ? `<button class="btn" data-act="stop">${icon('stop')} Stop</button>` : `<button class="btn light" data-act="start" ${!S.setup.ready || !ms.length ? 'disabled' : ''}>${icon('play')} Start server</button>`}</div>
+    <div class="row"><div class="txt"><div class="t">API URL</div><div class="d">In KSTRL: Settings → Models → Model Server → OpenAI-compatible, then paste this. KSTRL creates its own key.</div></div>
+      <div class="copyable"><span class="mono" style="font-size:12.5px">${esc(url)}</span><button class="btn" data-act="copy" data-text="${esc(url)}">${icon('copy')}</button></div></div>
+  </div></div>
+  <div class="sec"><div class="sec-t">Settings</div><div class="card">
+    <div class="row"><div class="txt"><div class="t">Model</div><div class="d">${ms.length ? 'Which downloaded model to serve.' : 'Download a model on the Models page first.'}</div></div>
+      <select class="input md mono" id="sv-model" ${on || busy ? 'disabled' : ''}>${ms.map((m) => `<option ${m.id === model ? 'selected' : ''}>${esc(m.id)}</option>`).join('')}</select></div>
+    <div class="row"><div class="txt"><div class="t">Port</div><div class="d">KSTRL's sign-up screen expects 8000.</div></div><input class="input sm mono" id="sv-port" value="${esc(c.port || 8000)}" ${on || busy ? 'disabled' : ''}></div>
+    <div class="row"><div class="txt"><div class="t">Context</div><div class="d">Tokens the model can see at once. Keep it at least as big as KSTRL's context window (12k).</div></div>
+      <select class="input sm" id="sv-ctx" ${on || busy ? 'disabled' : ''}>${[8192, 12288, 16384, 32768].map((n) => `<option value="${n}" ${+(c.ctx || 16384) === n ? 'selected' : ''}>${n / 1024}k</option>`).join('')}</select></div>
+    <div class="row"><div class="txt"><div class="t">Allow other devices</div><div class="d">Listen on your network so other PCs (or the internet, with port forwarding) can connect.</div></div><button class="toggle ${c.public ? 'on' : ''}" data-tog="public" ${on || busy ? 'disabled' : ''}></button></div>
+    <div class="row"><div class="txt"><div class="t">Require API keys</div><div class="d">Recommended. KSTRL gets a key automatically; accounts and usage limits need this on.</div></div><button class="toggle ${c.auth !== false ? 'on' : ''}" data-tog="auth" ${on || busy ? 'disabled' : ''}></button></div>
+  </div></div>
+  <div class="sec"><div class="sec-t">Log</div><div class="card"><pre class="log" id="svlog">${esc(sv.log.map((l) => l.replace(/^\r/, '')).join('\n')) || 'The server log shows here.'}</pre></div></div></div>`;
+}
+function md(text) {
+  const parts = String(text).split(/```/);
+  return parts.map((p, i) => {
+    if (i % 2) { const nl = p.indexOf('\n'); return `<pre><code>${esc(nl >= 0 ? p.slice(nl + 1) : p)}</code></pre>`; }
+    return esc(p).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
+  }).join('');
+}
+function pageChat() {
+  const sv = S.server;
+  const msgs = chat.map((m) => m.role === 'user'
+    ? `<div class="msg"><div class="who">You</div><div class="bubble">${esc(m.content)}</div></div>`
+    : `<div class="msg"><div class="who"><img src="/icon.png" alt="">Launch${sv.model ? ' · ' + esc(sv.model) : ''}</div><div class="reply">${m.content ? md(m.content) : '<span class="dots"><span></span><span></span><span></span></span>'}${m.error ? `<div class="err" style="margin-top:6px">${esc(m.error)}</div>` : ''}</div>${m.stats ? `<div class="muted" style="font-size:11.5px;margin-top:6px">${esc(m.stats)}</div>` : ''}</div>`).join('');
+  return `<div class="chat"><div class="msgs" id="msgs"><div class="inner">
+    ${chat.length ? msgs : `<div style="text-align:center;margin-top:18vh"><img src="/icon.png" style="width:44px;height:44px;border-radius:11px"><div class="title" style="margin:14px 0 6px">Chat with your model</div><div class="subtitle" style="margin:0">${sv.running ? `Talking to <span class="mono">${esc(sv.model)}</span> on this PC.` : 'Start the server first — then test your model here.'}</div>${sv.running ? '' : '<div style="margin-top:14px"><button class="btn light" data-go="server">Go to Server</button></div>'}</div>`}
+  </div></div>
+  <div class="composer-wrap"><div class="composer">
+    <textarea id="prompt" rows="2" placeholder="${sv.running ? 'Message ' + esc(sv.model) + '…' : 'Start the server to chat'}" ${sv.running ? '' : 'disabled'}>${esc($('#prompt')?.value || '')}</textarea>
+    <div class="cbar"><div>${chat.length ? `<button class="btn ghost" data-act="clear">${icon('trash')} Clear</button>` : ''}</div>
+      ${streaming ? `<button class="btn send" data-act="stopchat" title="Stop">${icon('stop')}</button>` : `<button class="send grad" data-act="send" title="Send" ${sv.running ? '' : 'disabled'}>${icon('up')}</button>`}</div>
+  </div><div class="chat-foot">Runs locally with the Launch engine.</div></div></div>`;
+}
+function pageKeys() {
+  const ks = lists.keys;
+  return `<div class="inner">
+  <div class="title">API Keys</div><div class="subtitle">KSTRL installs and accounts get keys automatically. Create one here for other apps. Launch only stores a hash of each key.</div>
+  ${newKey ? `<div class="sec"><div class="card"><div class="row col"><div class="txt"><div class="t ok">Your new key</div><div class="d">Copy it now — Launch won't show it again.</div></div><div class="newkey">${esc(newKey)}</div><div><button class="btn light" data-act="copy" data-text="${esc(newKey)}">${icon('copy')} Copy</button> <button class="btn ghost" data-act="hidekey">Done</button></div></div></div></div>` : ''}
+  <div class="sec"><div class="sec-t">Keys <span><button class="btn ghost" data-act="reload-keys">${icon('refresh')}</button> <button class="btn" data-act="keyform">${icon('plus')} Create key</button></span></div><div class="card">
+    ${keyForm ? `<div class="row"><input class="input" id="kname" placeholder="Name (optional), e.g. My app"><div class="seg" id="kplan"><button class="on" data-plan="free">Free</button><button data-plan="max">MAX</button></div><button class="btn light" data-act="createkey">Create</button></div>` : ''}
+    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ks ? '<div class="empty">Loading…</div>' : ks.error ? `<div class="empty err">${esc(ks.error)}</div>` : !ks.length ? '<div class="empty">No keys yet.</div>' :
+      ks.slice().reverse().map((k) => `<div class="row"><div class="txt"><div class="t"><span class="mono" style="font-size:13px">${esc(k.prefix)}…</span> <span class="pill ${k.plan === 'max' ? 'max' : ''}">${k.plan === 'max' ? 'MAX' : 'Free'}</span> ${k.state !== 'active' ? `<span class="pill bad">${esc(k.state)}</span>` : ''}</div>
+        <div class="d">${esc(k.email || k.name || (k.install ? 'KSTRL install (automatic)' : 'Manual key'))} · ${k.used} credits today</div></div>
+        ${k.state === 'active' ? `<div class="acts"><button class="btn" data-act="kplan" data-ref="${esc(k.prefix)}" data-val="${k.plan === 'max' ? 'free' : 'max'}">Make ${k.plan === 'max' ? 'Free' : 'MAX'}</button><button class="btn ghost danger" data-act="krevoke" data-ref="${esc(k.prefix)}">Revoke</button></div>` : ''}</div>`).join('')}
+  </div></div></div>`;
+}
+function pageUsers() {
+  const us = lists.users;
+  return `<div class="inner">
+  <div class="title">Accounts</div><div class="subtitle">People who signed up from KSTRL's Sign up screen. Usage is counted per account, across all their devices.</div>
+  <div class="sec"><div class="sec-t">Accounts <button class="btn ghost" data-act="reload-users">${icon('refresh')}</button></div><div class="card">
+    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !us ? '<div class="empty">Loading…</div>' : us.error ? `<div class="empty err">${esc(us.error)}</div>` : !us.length ? '<div class="empty">No accounts yet. They appear when someone signs up in KSTRL with this server.</div>' :
+      us.map((u) => `<div class="row"><div class="txt"><div class="t">${esc(u.email)} <span class="pill ${u.plan === 'max' ? 'max' : ''}">${u.plan === 'max' ? 'MAX' : 'Free'}</span> ${u.banned ? '<span class="pill bad">blocked</span>' : ''}</div><div class="d">${esc(u.name || '')}${u.name ? ' · ' : ''}${u.used} credits today</div></div>
+        ${u.banned ? '' : `<div class="acts"><button class="btn" data-act="uplan" data-email="${esc(u.email)}" data-val="${u.plan === 'max' ? 'free' : 'max'}">Make ${u.plan === 'max' ? 'Free' : 'MAX'}</button><button class="btn ghost danger" data-act="uban" data-email="${esc(u.email)}">Block</button></div>`}</div>`).join('')}
+  </div></div></div>`;
+}
+function pageSettings() {
+  const st = S.setup, u = S.update;
+  return `<div class="inner">
+  <div class="title">Settings</div><div class="subtitle">Runtime, updates and files.</div>
+  <div class="sec"><div class="sec-t">Updates</div><div class="card">
+    <div class="row"><div class="txt"><div class="t">Launch ${esc(S.version)}</div><div class="d">${u.available ? `<span class="ok">Launch ${esc(u.available.version)} is available.</span>` : u.error ? `<span class="err">${esc(u.error)}</span>` : u.checked ? 'You’re on the latest version.' : 'Checking…'}</div></div>
+      ${u.available ? `<button class="btn grad" data-act="upd-open">${icon('up')} Update</button>` : `<button class="btn" data-act="upd-check">${icon('refresh')} Check for updates</button>`}</div>
+  </div></div>
+  <div class="sec"><div class="sec-t">Runtime</div><div class="card">
+    <div class="row"><div class="txt"><div class="t">${st.ready ? 'Ready' : st.error ? '<span class="err">Setup failed</span>' : 'Setting up…'}</div><div class="d">${st.ready ? `${esc(st.hw)} · PyTorch ${esc(st.torch)}` : esc(st.error || st.progress || 'Downloading Python and PyTorch for this PC')}</div></div>
+      <button class="btn" data-act="reinstall" ${st.ready || st.error ? '' : 'disabled'}>Reinstall runtime</button></div>
+    <div class="row"><div class="txt"><div class="t">Files</div><div class="d mono" style="font-size:12px">${esc(S.paths.base)}<br>${esc(S.paths.models)}</div></div>
+      <div class="acts"><button class="btn" data-act="open" data-what="base">${icon('folder')} Launch folder</button><button class="btn" data-act="open" data-what="models">${icon('folder')} Models</button></div></div>
+  </div></div>
+  <div class="sec"><div class="sec-t">Setup log</div><div class="card"><pre class="log">${esc(st.log.map((l) => l.replace(/^\r/, '')).join('\n')) || '—'}</pre></div></div></div>`;
+}
+
+// ---------- overlays ----------
+function renderOverlay() {
+  const st = S.setup, u = S.update;
+  let html = '';
+  if (!st.ready) {
+    html = `<div class="overlay"><div class="modal setup"><div class="head"><img src="/icon.png" alt=""><div><h3 style="margin:0">${st.error ? 'Setup didn’t finish' : 'Setting up Launch'}</h3><p>${st.error ? esc(st.error) : 'First run only: downloading Python and PyTorch for this PC. This can take a few minutes.'}</p></div></div>
+      ${st.error ? '' : `<div class="bar"><div style="width:${(st.progress.match(/(\d+)%/) || [0, 8])[1]}%"></div></div><p class="mono" style="font-size:12px">${esc(st.progress || 'Starting…')}</p>`}
+      <pre class="log">${esc(st.log.slice(-40).map((l) => l.replace(/^\r/, '')).join('\n'))}</pre>
+      ${st.error ? '<div class="mrow"><button class="btn grad" data-act="reinstall">Try again</button></div>' : ''}</div></div>`;
+  } else if (u.available && (updDismissed !== u.available.version || u.busy || (updTried && u.error))) {
+    html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt="">
+      <h3>${u.error && updTried ? 'The update didn’t work' : 'Update available'}</h3>
+      <p>${u.busy ? esc(u.status) : u.error && updTried ? esc(u.error) : `Launch ${esc(u.available.version)} is out — you have ${esc(S.version)}. ${u.self === false ? 'Open the download page to get it.' : 'Update now and Launch restarts in the new version.'}`}</p>
+      ${u.busy ? `<div class="bar"><div style="width:${(u.status.match(/(\d+)%/) || [0, 3])[1]}%"></div></div>` : ''}
+      <div class="mrow">${u.busy ? '' : `<button class="btn ghost" data-act="upd-later">Later</button><button class="btn grad" data-act="upd-apply">${u.self === false ? 'Download' : 'Update now'}</button>`}</div></div></div>`;
+  }
+  const ov = $('#overlay');
+  if (ov.dataset.html !== html) { ov.innerHTML = html; ov.dataset.html = html; }
+}
+
+// ---------- render ----------
+let lastMain = '';
+let rendering = false;
+function render() {
+  if (!S || rendering) return;
+  rendering = true;
+  try { renderNow(); } finally { rendering = false; }
+}
+function renderNow() {
+  renderNav();
+  const html = { models: pageModels, server: pageServer, chat: pageChat, keys: pageKeys, users: pageUsers, settings: pageSettings }[page]();
+  if (html !== lastMain) {
+    const main = $('#main'), active = document.activeElement, id = active?.id, pos = active?.selectionStart;
+    const logBottom = $('#svlog') ? $('#svlog').scrollHeight - $('#svlog').scrollTop - $('#svlog').clientHeight < 30 : true;
+    const msgsBottom = $('#msgs') ? $('#msgs').scrollHeight - $('#msgs').scrollTop - $('#msgs').clientHeight < 60 : true;
+    main.innerHTML = html; lastMain = html;
+    if (id && $('#' + id)) { const el = $('#' + id); el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch {} }
+    if ($('#svlog') && logBottom) $('#svlog').scrollTop = 1e9;
+    if ($('#msgs') && msgsBottom) $('#msgs').scrollTop = 1e9;
+  }
+  renderOverlay();
+}
+
+// ---------- actions ----------
+async function sendChat() {
+  const ta = $('#prompt'); const text = ta?.value.trim();
+  if (!text || streaming) return;
+  ta.value = '';
+  chat.push({ role: 'user', content: text });
+  const reply = { role: 'assistant', content: '' }; chat.push(reply);
+  const ctrl = new AbortController(); streaming = ctrl; render();
+  const t0 = performance.now(); let n = 0;
+  try {
+    const r = await fetch('/api/chat', { method: 'POST', signal: ctrl.signal, headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: chat.filter((m) => m !== reply && !m.error).map((m) => ({ role: m.role, content: m.content })) }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { value, done } = await rd.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
+        const ev = JSON.parse(line.slice(5));
+        if (ev.error) throw new Error(ev.error.message || 'engine error');
+        if (ev.usage) n = ev.usage.completion_tokens || 0;
+        const d = ev.choices?.[0]?.delta?.content; if (d) { reply.content += d; render(); }
+      }
+    }
+  } catch (e) { if (e.name !== 'AbortError') reply.error = e.message; }
+  if (n) reply.stats = `${n} tokens · ${(n / ((performance.now() - t0) / 1000)).toFixed(1)} tok/s`;
+  if (!reply.content && !reply.error) reply.content = '(stopped)';
+  streaming = null; render();
+}
+
+document.addEventListener('click', async (e) => {
+  const g = e.target.closest('[data-go]'); if (g) return go(g.dataset.go);
+  const tog = e.target.closest('[data-tog]');
+  if (tog && !tog.disabled) { tog.classList.toggle('on'); draft[tog.dataset.tog] = tog.classList.contains('on'); render(); return; }
+  const seg = e.target.closest('#kplan button'); if (seg) { seg.parentNode.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === seg)); return; }
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'pull') { const repo = $('#repo').value.trim(); await act(() => api('pull', { repo, token: $('#hftoken').value.trim() })); poll(); }
+  else if (a === 'reload-models') load('models');
+  else if (a === 'reload-keys') load('keys');
+  else if (a === 'reload-users') load('users');
+  else if (a === 'use') { draft.model = b.dataset.id; go('server'); }
+  else if (a === 'rm') { if (confirm(`Delete ${b.dataset.id} from this PC?`)) { await act(() => api('models/delete', { id: b.dataset.id }), 'Model deleted'); load('models'); } }
+  else if (a === 'start') {
+    await act(() => api('server/start', { model: $('#sv-model').value, port: $('#sv-port').value, ctx: $('#sv-ctx').value, public: $('[data-tog=public]').classList.contains('on'), auth: $('[data-tog=auth]').classList.contains('on') }));
+    poll();
+  }
+  else if (a === 'stop') { await act(() => api('server/stop', {})); poll(); }
+  else if (a === 'copy') { try { await navigator.clipboard.writeText(b.dataset.text); toast('Copied'); } catch { toast('Couldn’t copy', true); } }
+  else if (a === 'send') sendChat();
+  else if (a === 'stopchat') streaming?.abort();
+  else if (a === 'clear') { chat = []; render(); }
+  else if (a === 'keyform') { keyForm = !keyForm; render(); setTimeout(() => $('#kname')?.focus(), 20); }
+  else if (a === 'createkey') {
+    const r = await act(() => api('keys/create', { name: $('#kname').value, plan: $('#kplan .on').dataset.plan }));
+    if (r?.key) { newKey = r.key; keyForm = false; load('keys'); }
+  }
+  else if (a === 'hidekey') { newKey = null; render(); }
+  else if (a === 'kplan') { await act(() => api('keys/action', { action: 'plan', ref: b.dataset.ref, value: b.dataset.val })); load('keys'); }
+  else if (a === 'krevoke') { if (confirm('Revoke this key? Apps using it stop working.')) { await act(() => api('keys/action', { action: 'revoke', ref: b.dataset.ref })); load('keys'); } }
+  else if (a === 'uplan') { await act(() => api('users/action', { action: 'plan', email: b.dataset.email, value: b.dataset.val })); load('users'); }
+  else if (a === 'uban') { if (confirm(`Block ${b.dataset.email}? They won't be able to log in or chat.`)) { await act(() => api('users/action', { action: 'ban', email: b.dataset.email })); load('users'); } }
+  else if (a === 'upd-check') { await act(() => api('update/check', {})); await poll(); if (!S.update.available && !S.update.error) toast('You’re on the latest version'); }
+  else if (a === 'upd-open') { updDismissed = null; render(); }
+  else if (a === 'upd-later') { updDismissed = S.update.available?.version; updTried = false; render(); }
+  else if (a === 'upd-apply') { updTried = true; if (S.server.running && !confirm('The server is running. Stop it and update?')) return; await act(() => api('update/apply', {})); if (S.update.self === false) updDismissed = S.update.available?.version; poll(); }
+  else if (a === 'reinstall') { if (S.setup.error || confirm('Download and reinstall Python and PyTorch?')) { await act(() => api('reinstall', {})); poll(); } }
+  else if (a === 'open') act(() => api('open', { what: b.dataset.what }));
+});
+document.addEventListener('change', (e) => { const m = { 'sv-model': 'model', 'sv-port': 'port', 'sv-ctx': 'ctx' }[e.target.id]; if (m) { draft[m] = e.target.value; setTimeout(render); } });
+document.addEventListener('input', (e) => { if (e.target.id === 'sv-port') draft.port = e.target.value; });
+document.addEventListener('keydown', (e) => { if (e.target.id === 'prompt' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } if (e.target.id === 'repo' && e.key === 'Enter') $('[data-act=pull]')?.click(); if (e.target.id === 'kname' && e.key === 'Enter') $('[data-act=createkey]')?.click(); });
+
+// ---------- polling ----------
+let wasReady = false, wasDownloading = false;
+async function poll() {
+  try { S = await api('state'); } catch { return; }
+  if (S.setup.ready && !wasReady) { wasReady = true; load('models'); }
+  if (wasDownloading && !S.download.busy) load('models');
+  wasDownloading = S.download.busy;
+  render();
+}
+poll(); setInterval(poll, 1000);
+addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', new Blob([JSON.stringify({ t: TOKEN })], { type: 'application/json' })));
+</script>
+</body>
+</html>
