@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,6 +23,12 @@ from pathlib import Path
 ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
 B = None  # the bootstrap module
 TOKEN = secrets.token_urlsafe(24)
+ADMIN = secrets.token_urlsafe(24)  # lets this window load/unload models on the server it started
+MODELS_DIR = Path.home() / ".launch" / "models"
+MAP_FILE = Path.home() / ".launch" / "map.json"
+COLOSSUS = [("colossus-2.1", "Colossus 2.1", "1×"), ("colossus-2.2", "Colossus 2.2", "1.6×"), ("colossus-2.2-uc", "Colossus 2.2 UC", "2.5×"), ("colossus-3", "Colossus 3", "4×")]
+ARCHS = {"llama", "mistral", "qwen2", "qwen3", "qwen2_moe", "qwen3_moe", "mixtral", "gemma", "gemma2", "gemma3_text", "phi3",
+         "granite", "olmo2", "olmo3", "starcoder2", "smollm3", "seed_oss", "arcee"}
 PORT = 0
 LOCK = threading.Lock()
 
@@ -90,6 +97,11 @@ def do_setup(force=False):
     st["torch"] = state.get("torch", "")
     st["ready"] = True
     st["progress"] = ""
+    if not SERVER_PROC and not S["server"]["starting"]:  # the server runs whenever Launch is open
+        try:
+            start_server({k: v for k, v in cfg().items() if k != "model"})
+        except Exception as e:  # noqa: BLE001
+            S["server"]["error"] = str(e)
 
 
 def need_ready():
@@ -110,7 +122,18 @@ def run_cmd(*args) -> list[str]:
 # ---------------- models ----------------
 def models():
     need_ready()
-    return B.launch_json("list", "--json")
+    ms = B.launch_json("list", "--json")
+    m = read_map()
+    eng = S["server"].get("engine") or {}
+    for x in ms:
+        x["used_by"] = [name for key, name, _ in COLOSSUS if m.get(key) == x["id"]]
+        x["status"] = "loaded" if eng.get("loaded") == x["id"] else "loading" if eng.get("loading") == x["id"] else "not loaded"
+        x["local"] = x["id"].startswith("local/")
+        try:
+            x["added"] = (MODELS_DIR / x["id"].replace("/", "--", 1)).stat().st_mtime
+        except OSError:
+            x["added"] = 0
+    return ms
 
 
 def pull(repo: str, token: str):
@@ -140,19 +163,17 @@ def start_server(o: dict):
     if SERVER_PROC or sv["starting"]:
         raise ApiError("The server is already running.")
     need_ready()
-    model = str(o.get("model") or "").strip()
-    if not model:
-        raise ApiError("Download a model first, then pick it here.")
+    model = str(o.get("model") or "").strip()  # optional: preload this one
     try:
         port, ctx = int(o.get("port") or 8000), int(o.get("ctx") or 16384)
     except ValueError:
         raise ApiError("Port and context must be numbers.") from None
     public, auth = bool(o.get("public")), o.get("auth", True) is not False
-    save_cfg(model=model, port=port, ctx=ctx, public=public, auth=auth)
+    save_cfg(port=port, ctx=ctx, public=public, auth=auth)
     host = "0.0.0.0" if public else "127.0.0.1"
-    args = ["serve", model, "--port", str(port), "--host", host, "--ctx", str(ctx)] + ([] if auth else ["--no-auth"])
+    args = ["serve", *([model] if model else []), "--port", str(port), "--host", host, "--ctx", str(ctx)] + ([] if auth else ["--no-auth"])
     STOPPING = False
-    sv.update(starting=True, running=False, url=None, model=model, error=None, public=public, auth=auth)
+    sv.update(starting=True, running=False, url=None, model=None, error=None, public=public, auth=auth, port=port)
     push(sv["log"], f"$ launch {' '.join(args)}")
 
     def started(p):
@@ -163,13 +184,16 @@ def start_server(o: dict):
         push(sv["log"], t, prog)
         if "Launch API on" in t:
             sv.update(running=True, starting=False, url=f"http://127.0.0.1:{port}/v1")
+            bg(refresh_engine)
+        if t.startswith("Loaded ") or t.startswith("Loading ") or t.startswith("Unloaded ") or t.startswith("Couldn't load "):
+            bg(refresh_engine)
 
     def run():
         global SERVER_PROC
-        code = B.stream(B.launch_cmd(*args), line, env=B.child_env(), started=started)
+        code = B.stream(B.launch_cmd(*args), line, env={**B.child_env(), "LAUNCH_ADMIN_TOKEN": ADMIN}, started=started)
         SERVER_PROC = None
         err = None if STOPPING or code == 0 else f"The server stopped (exit {code}). See the log below."
-        sv.update(running=False, starting=False, url=None, error=err)
+        sv.update(running=False, starting=False, url=None, error=err, model=None, engine={})
         push(sv["log"], "Server stopped." if not err else err)
     bg(run)
 
@@ -179,6 +203,108 @@ def stop_server():
     if SERVER_PROC:
         STOPPING = True
         SERVER_PROC.terminate()
+
+
+def admin(path: str, body: dict | None = None, timeout=900):
+    sv = S["server"]
+    if not sv.get("running"):
+        raise ApiError("The server isn't running. Start it on the Server page.")
+    req = urllib.request.Request(f"http://127.0.0.1:{sv['port']}/launch/{path}", data=None if body is None else json.dumps(body).encode(),
+                                 headers={"x-launch-admin": ADMIN, "content-type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read())["error"]["message"]
+        except Exception:  # noqa: BLE001
+            msg = str(e)
+        raise ApiError(msg) from None
+
+
+def refresh_engine():
+    try:
+        st = admin("status", timeout=5)
+        S["server"]["engine"] = st
+        S["server"]["model"] = st.get("loaded")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def read_map() -> dict:
+    try:
+        return {k: v for k, v in json.loads(MAP_FILE.read_text()).items() if isinstance(v, str) and v}
+    except (OSError, ValueError):
+        return {}
+
+
+def set_map(key: str, model: str):
+    if key not in [c[0] for c in COLOSSUS] + ["default"]:
+        raise ApiError("Unknown model slot")
+    m = read_map()
+    if model:
+        m[key] = model
+    else:
+        m.pop(key, None)
+    MAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MAP_FILE.write_text(json.dumps(m, indent=2))
+
+
+def discover(q: str):
+    ep = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
+    params = urllib.parse.urlencode({"search": q, "filter": "text-generation", "sort": "downloads", "direction": "-1", "limit": "40", "full": "false"})
+    req = urllib.request.Request(f"{ep}/api/models?{params}", headers={"User-Agent": "Launch/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            rows = json.load(r)
+    except urllib.error.URLError as e:
+        raise ApiError(f"Couldn't reach Hugging Face ({getattr(e, 'reason', e)}).") from None
+    out = []
+    for m in rows:
+        tags = set(m.get("tags") or [])
+        mid = m.get("id") or m.get("modelId") or ""
+        low = mid.lower()
+        quant = bool(tags & {"gguf", "awq", "gptq", "mlx", "onnx", "exl2", "fp8", "bitsandbytes"}) or any(x in low for x in ("gguf", "-awq", "gptq", "bnb", "4bit", "8bit", "-mlx", "fp8", "exl2", "onnx"))
+        arch = next((t for t in tags if t in ARCHS), None)
+        out.append({"id": mid, "downloads": m.get("downloads", 0), "likes": m.get("likes", 0), "gated": bool(m.get("gated")),
+                    "supported": (not quant) and arch is not None, "arch": arch, "quant": quant})
+    return out
+
+
+def pick_folder() -> str | None:
+    if B.WIN:
+        ps = ("Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+              "$f.Description = 'Pick a model folder (with config.json and .safetensors files)'; "
+              "if ($f.ShowDialog() -eq 'OK') { $f.SelectedPath }")
+        out = subprocess.run(["powershell", "-NoProfile", "-STA", "-Command", ps], capture_output=True, text=True, creationflags=B.NO_WINDOW)
+        return out.stdout.strip() or None
+    out = subprocess.run(["zenity", "--file-selection", "--directory"], capture_output=True, text=True) if shutil.which("zenity") else None
+    return (out.stdout.strip() or None) if out else None
+
+
+def add_folder(path: str | None = None) -> str:
+    need_ready()
+    src = Path(path) if path else (Path(p) if (p := pick_folder()) else None)
+    if not src:
+        raise ApiError("cancelled")
+    if src.suffix.lower() == ".gguf" or any(src.glob("*.gguf")) and not any(src.glob("*.safetensors")):
+        raise ApiError("GGUF files aren't supported by the Launch engine. Download the original model (without -GGUF) instead.")
+    if not (src / "config.json").exists() or not (any(src.glob("*.safetensors")) or any(src.glob("pytorch_model*.bin"))):
+        raise ApiError("That folder needs a config.json and .safetensors (or pytorch_model.bin) weights — a Hugging Face model folder.")
+    if not (src / "tokenizer.json").exists():
+        raise ApiError("That folder has no tokenizer.json.")
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    name = "local--" + "".join(ch if ch.isalnum() or ch in "-_." else "-" for ch in src.name)
+    dest = MODELS_DIR / name
+    if dest.exists():
+        raise ApiError(f"local/{src.name} is already added.")
+    if B.WIN:  # a junction: no copy, no admin rights needed
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", str(dest), str(src)], capture_output=True, text=True, creationflags=B.NO_WINDOW)
+        if r.returncode != 0:
+            shutil.copytree(src, dest)
+    else:
+        os.symlink(src, dest)
+    return name.replace("--", "/", 1)
 
 
 # ---------------- chat (proxied to the local server) ----------------
@@ -329,7 +455,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/icon.png":
             return self._send(200, (ROOT / "assets" / "icon.png").read_bytes(), "image/png")
         if path.startswith("/api/"):
-            return self.api("GET", path, {})
+            return self.api("GET", path if not path.startswith("/api/discover") else "/api/discover", {})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -359,6 +485,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, models())
             if path == "/api/keys":
                 return self._send(200, keys())
+            if path == "/api/map" and method == "GET":
+                return self._send(200, {"map": read_map(), "slots": [{"id": a, "name": b, "weight": c} for a, b, c in COLOSSUS]})
+            if path.startswith("/api/discover"):
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("q", [""])[0]
+                return self._send(200, discover(q))
             if path == "/api/users":
                 return self._send(200, users())
             if method != "POST":
@@ -374,6 +505,27 @@ class Handler(BaseHTTPRequestHandler):
                 start_server(body)
             elif path == "/api/server/stop":
                 stop_server()
+            elif path == "/api/server/restart":
+                stop_server()
+                for _ in range(50):
+                    if not SERVER_PROC and not S["server"]["starting"]:
+                        break
+                    time.sleep(0.2)
+                start_server({**{k: v for k, v in cfg().items() if k != "model"}, **{k: v for k, v in body.items() if k != "model"}})
+            elif path == "/api/model/load":
+                try:
+                    return self._send(200, admin("load", {"model": str(body.get("id", ""))}))
+                finally:
+                    refresh_engine()
+            elif path == "/api/model/unload":
+                try:
+                    return self._send(200, admin("unload", {}))
+                finally:
+                    refresh_engine()
+            elif path == "/api/map":
+                set_map(str(body.get("key", "")), str(body.get("model", "")))
+            elif path == "/api/addfolder":
+                return self._send(200, {"id": add_folder(body.get("path"))})
             elif path == "/api/keys/create":
                 need_ready()
                 name, plan = str(body.get("name", "")).strip(), "max" if body.get("plan") == "max" else "free"
@@ -423,7 +575,7 @@ class Handler(BaseHTTPRequestHandler):
         if not url:
             raise ApiError("Start the server first (Server page).")
         key = chat_key()
-        payload = json.dumps({"model": S["server"]["model"], "messages": body.get("messages", []), "stream": True,
+        payload = json.dumps({"model": body.get("model") or S["server"].get("model") or "", "messages": body.get("messages", []), "stream": True,
                               "stream_options": {"include_usage": True}, "max_tokens": int(body.get("max_tokens") or 2048)}).encode()
         req = urllib.request.Request(url + "/chat/completions", data=payload,
                                      headers={"content-type": "application/json", **({"authorization": f"Bearer {key}"} if key else {})})
@@ -496,6 +648,13 @@ def main(bootstrap_module):
     bg(srv.serve_forever)
     bg(do_setup)
     bg(check_update)
+
+    def watch_engine():
+        while True:
+            time.sleep(3)
+            if S["server"].get("running"):
+                refresh_engine()
+    bg(watch_engine)
     url = f"http://127.0.0.1:{PORT}/?t={TOKEN}"
     ui_log(f"Launch {B.VERSION} started on port {PORT}")
     open_window(url)

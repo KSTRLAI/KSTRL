@@ -4,7 +4,7 @@
   launch list                        downloaded models
   launch rm <model>                  delete a downloaded model
   launch run <model> "prompt"        quick test in the terminal
-  launch serve <model> [--port 8000] [--host 127.0.0.1] [--ctx 8192] [--no-auth]
+  launch serve [model] [--port 8000] [--host 127.0.0.1] [--ctx 8192] [--no-auth]
   launch keys create [--plan free|max] [--name N] [--email E]
   launch keys list
   launch keys plan <key|prefix|install_id> free|max
@@ -79,14 +79,20 @@ def cmd_run(a):
 
 
 def cmd_serve(a):
+    import os
     import uvicorn
+    from .manager import Manager
     from .server import create_app
     from .store import Store
-    eng = load_engine(a)
-    app = create_app(eng, Store(), auth=not a.no_auth, model_id=a.model)
+    mgr = Manager(ctx=a.ctx, device=a.device)
+    if a.model:
+        mgr.get(a.model)
+    app = create_app(mgr, Store(), auth=not a.no_auth, admin_token=os.environ.get("LAUNCH_ADMIN_TOKEN"))
     if not a.no_auth:
         print("API keys are required (Authorization: Bearer …). KSTRL installs get one automatically from /v1/kstrl/register.")
-    print(f"Launch API on http://{a.host}:{a.port}/v1")
+    if not a.model:
+        print("Models load on the first request (or from the Launch window).")
+    print(f"Launch API on http://{a.host}:{a.port}/v1", flush=True)
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
 
 
@@ -153,7 +159,7 @@ def main(argv=None):
     s = sub.add_parser("rm", help="delete a model"); s.add_argument("model"); s.set_defaults(fn=cmd_rm)
     for name, fn in (("run", cmd_run), ("serve", cmd_serve)):
         s = sub.add_parser(name)
-        s.add_argument("model")
+        s.add_argument("model", nargs="?" if name == "serve" else None)
         if name == "run":
             s.add_argument("prompt")
             s.add_argument("--max-tokens", type=int, default=512)

@@ -7,7 +7,7 @@
 <link rel="icon" href="/icon.png">
 <style>
 :root {
-  --bg: #0a0a0a; --side: rgba(7,7,7,.92); --pane-border: rgba(255,255,255,.08); --border: rgba(255,255,255,.08);
+  --bg: #0a0a0a; --side: #070707; --line: rgba(255,255,255,.08); --border: rgba(255,255,255,.1);
   --text: #f5f5f5; --text-2: #a3a3a3; --text-3: #737373; --ok: #4ade80; --warn: #f5b45a; --err: #fca5a5;
   --grad: linear-gradient(135deg, rgba(255,255,255,.96) 0%, rgba(255,214,214,.9) 28%, rgba(255,128,128,.9) 62%, rgba(255,61,61,.95) 100%);
   --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
@@ -15,329 +15,456 @@
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13.5px; overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
 input, textarea, select { font: inherit; color: inherit; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.16); }
-.orbs { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.orbs span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: .55; }
-.orbs .o1 { width: 620px; height: 620px; left: -160px; top: -220px; background: radial-gradient(circle, rgba(255,255,255,.08), transparent 65%); }
-.orbs .o2 { width: 560px; height: 560px; right: -140px; bottom: -200px; background: radial-gradient(circle, rgba(255,90,90,.06), transparent 65%); }
-svg.i { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+svg.i.sm { width: 15px; height: 15px; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 
+/* title + tool bars */
+.titlebar { height: 44px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--line); background: #050505; }
+.brand { display: flex; align-items: center; gap: 10px; margin-right: 24px; }
+.brand img { width: 20px; height: 20px; border-radius: 5px; }
+.brand span { font-size: 14px; font-weight: 700; letter-spacing: .34em; }
+.menus { display: flex; gap: 2px; }
+.menus > button { height: 30px; padding: 0 12px; border-radius: 7px; color: #d4d4d4; font-size: 14px; }
+.menus > button:hover, .menus > button.open { background: rgba(255,255,255,.08); color: #fff; }
+.toolbar { height: 58px; display: flex; align-items: center; padding: 0 14px; border-bottom: 1px solid var(--line); background: #070707; }
+.tb-left { width: 422px; display: flex; align-items: center; gap: 6px; }
+.tb-left .sp { flex: 1; }
+.ib { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; color: #d4d4d4; }
+.ib:hover { background: rgba(255,255,255,.07); color: #fff; }
+.ib:disabled { opacity: .35; pointer-events: none; }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.srv-pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 13px; border-radius: 999px; font-size: 13.5px; border: 1px solid rgba(74,222,128,.35); background: rgba(74,222,128,.08); color: #86efac; }
+.srv-pill .d { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px rgba(74,222,128,.8); }
+.srv-pill.off { color: var(--text-2); border-color: var(--border); background: rgba(255,255,255,.04); }
+.srv-pill.off .d { background: var(--text-3); box-shadow: none; }
+.srv-pill.busy { color: #fcd9a8; border-color: rgba(245,180,90,.35); background: rgba(245,180,90,.08); }
+.srv-pill.busy .d { background: var(--warn); box-shadow: none; }
+
 /* layout */
-.app { display: flex; height: 100%; }
-.side { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--pane-border); }
-.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; }
-.brand img { width: 26px; height: 26px; border-radius: 7px; }
-.brand .n { font-size: 14px; font-weight: 700; letter-spacing: .32em; }
-.nav { padding: 4px 8px; display: flex; flex-direction: column; gap: 2px; }
-.nav button { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border-radius: 10px; font-size: 14px; color: #e5e5e5; text-align: left; }
-.nav button svg { color: var(--text-2); }
-.nav button:hover { background: rgba(255,255,255,.06); }
+.app { display: flex; flex-direction: column; height: 100%; }
+.body { flex: 1; display: flex; min-height: 0; }
+.side { width: 436px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--line); overflow-y: auto; }
+.side.hidden { display: none; }
+.nav { padding: 20px 12px 8px; display: flex; flex-direction: column; gap: 3px; }
+.nav button { display: flex; align-items: center; gap: 14px; height: 50px; padding: 0 16px; border-radius: 12px; font-size: 17px; color: #e5e5e5; text-align: left; }
+.nav button:hover { background: rgba(255,255,255,.05); }
 .nav button.on { background: rgba(255,255,255,.08); color: #fff; }
-.nav button.on svg { color: #fff; }
-.nav .badge { margin-left: auto; font-size: 11px; color: var(--text-3); }
-.nav .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 10px rgba(74,222,128,.6); }
-.side-sec { padding: 18px 20px 6px; font-size: 12.5px; color: var(--text-3); }
-.side-foot { margin-top: auto; padding: 12px 14px 14px; border-top: 1px solid var(--pane-border); display: flex; flex-direction: column; gap: 10px; }
-.hw { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--text-2); }
-.hw .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: rgba(255,255,255,.06); }
-.hw .v { color: var(--text-3); font-size: 11.5px; }
+.nav .badge { margin-left: auto; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; font-size: 11.5px; color: var(--text-2); background: rgba(255,255,255,.08); }
+.sec-h { display: flex; align-items: center; justify-content: space-between; padding: 26px 28px 10px; font-size: 16px; color: var(--text-2); }
+.map { padding: 0 12px; display: flex; flex-direction: column; gap: 1px; }
+.map button { display: flex; align-items: center; gap: 12px; min-height: 43px; padding: 4px 16px; border-radius: 10px; text-align: left; color: var(--text-3); }
+.map button:hover { background: rgba(255,255,255,.04); color: var(--text-2); }
+.map .dot { width: 7px; height: 7px; border-radius: 50%; background: #3f3f46; flex-shrink: 0; }
+.map .on .dot { background: var(--ok); }
+.map .on { color: #e5e5e5; }
+.map .nm { flex: 1; min-width: 0; font-size: 16px; }
+.map .to { display: block; font-size: 12px; color: var(--text-3); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map .w { font-size: 13px; color: var(--text-3); }
+.gs { margin: 22px 16px 16px; padding: 18px; border-radius: 16px; border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.gs-h { display: flex; align-items: center; justify-content: space-between; font-size: 17px; font-weight: 600; margin-bottom: 12px; }
+.gs-h .n { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 400; color: var(--text-2); }
+.ring { width: 20px; height: 20px; }
+.gs-step { display: flex; align-items: center; gap: 12px; padding: 5px 4px; font-size: 16px; }
+.gs-step .c { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid #a3a3a3; flex-shrink: 0; }
+.gs-step.done { color: var(--text-3); text-decoration: line-through; }
+.gs-step.done .c { background: var(--ok); border-color: var(--ok); }
+.gs .cta { width: 100%; height: 52px; margin-top: 14px; border-radius: 10px; font-size: 16.5px; }
+.side-foot { margin-top: auto; display: flex; align-items: center; gap: 14px; padding: 16px 22px; border-top: 1px solid var(--line); }
+.avatar { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; font-weight: 600; background: #3f3f46; color: #e5e5e5; }
+.side-foot .nm { flex: 1; font-size: 17px; }
 .main { flex: 1; min-width: 0; overflow-y: auto; user-select: text; }
-.inner { width: min(860px, 100%); margin: 0 auto; padding: 34px 28px 60px; }
-.title { font-size: 22px; font-weight: 600; margin: 4px 0 4px 8px; }
-.subtitle { font-size: 13.5px; color: var(--text-2); margin: 0 0 22px 8px; }
-.sec { margin-bottom: 26px; }
-.sec-t { font-size: 14px; color: var(--text-2); margin: 0 0 10px 8px; display: flex; align-items: center; justify-content: space-between; }
-.card { background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.07); border-radius: 14px; backdrop-filter: blur(20px) saturate(150%); overflow: hidden; }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 15px 16px; border-top: 1px solid rgba(255,255,255,.06); }
+.inner { width: min(1140px, 100%); margin: 0 auto; padding: 46px 50px 70px; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 34px; }
+.head h1 { margin: 0 0 8px; font-size: 32px; font-weight: 600; letter-spacing: -.01em; }
+.head p { margin: 0; font-size: 16px; color: var(--text-2); line-height: 1.5; max-width: 720px; }
+.head .acts { display: flex; gap: 12px; flex-shrink: 0; padding-top: 44px; }
+.sub-h { font-size: 17px; font-weight: 600; margin: 0 0 14px; display: flex; align-items: center; justify-content: space-between; }
+.card { border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.025); overflow: hidden; margin-bottom: 28px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 500; font-size: 14.5px; color: #d4d4d4; padding: 20px 20px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.02); }
+td { padding: 22px 20px; border-top: 1px solid var(--line); vertical-align: middle; font-size: 15px; }
+tr:first-child td { border-top: 0; }
+.mname { font-weight: 600; font-size: 16.5px; word-break: break-all; }
+.mmeta { color: var(--text-2); font-size: 14px; margin-top: 6px; line-height: 1.5; }
+.muted { color: var(--text-3); }
+.ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border-top: 1px solid var(--line); }
 .row:first-child { border-top: 0; }
 .row.col { flex-direction: column; align-items: stretch; gap: 10px; }
-.txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.txt .t { font-size: 14.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.txt .d { font-size: 13px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
-.acts { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.txt { min-width: 0; flex: 1; }
+.txt .t { font-size: 15.5px; }
+.txt .d { font-size: 14px; color: var(--text-2); margin-top: 4px; line-height: 1.45; }
+.empty { padding: 34px 20px; text-align: center; color: var(--text-3); font-size: 15px; }
 .mono { font-family: var(--mono); }
-.muted { color: var(--text-3); }
-.empty { padding: 26px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
-.ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
 
 /* controls */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: var(--text); white-space: nowrap; }
-.btn:hover { background: rgba(255,255,255,.11); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 10px; font-size: 15px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.14); color: var(--text); white-space: nowrap; }
+.btn:hover { background: rgba(255,255,255,.09); }
 .btn:disabled { opacity: .45; pointer-events: none; }
+.btn.big { height: 46px; padding: 0 20px; font-size: 16px; border-radius: 11px; }
+.btn.sm { height: 34px; padding: 0 13px; font-size: 14.5px; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--text-2); }
 .btn.ghost:hover { background: rgba(255,255,255,.06); color: var(--text); }
 .btn.light { background: #f5f5f5; color: #0c0c0c; border-color: #f5f5f5; font-weight: 600; }
-.btn.light:hover { background: #fff; }
-.btn.danger:hover { color: var(--err); }
+.icon-del { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: #f87171; }
+.icon-del:hover { background: rgba(248,113,113,.1); }
 .grad { position: relative; overflow: hidden; background: var(--grad) !important; color: #2a0606 !important; border: 1px solid rgba(255,255,255,.6) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.95), inset 0 -1px 0 rgba(140,0,0,.28), 0 8px 26px -8px rgba(255,61,61,.6); font-weight: 600; }
 .grad:hover { filter: brightness(1.05) saturate(1.1); }
-.input { width: 100%; height: 34px; padding: 0 11px; border-radius: 9px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.12); outline: none; font-size: 13px; }
-.input:focus { border-color: rgba(255,255,255,.32); }
+.input { width: 100%; height: 42px; padding: 0 13px; border-radius: 10px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.14); outline: none; font-size: 15px; }
+.input:focus { border-color: rgba(255,255,255,.34); }
 .input::placeholder, textarea::placeholder { color: var(--text-3); }
-select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
+select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
 select.input option { background: #1b1b1b; }
-.sm { width: 120px; }
-.md { width: 260px; }
-.toggle { width: 36px; height: 20px; border-radius: 999px; background: rgba(255,255,255,.16); position: relative; flex-shrink: 0; transition: background .15s; }
-.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s, background .15s; }
-.toggle.on { background: #f5f5f5; }
-.toggle.on::after { transform: translateX(16px); background: #0c0c0c; }
-.seg { display: flex; padding: 3px; border-radius: 10px; gap: 3px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); }
-.seg button { height: 26px; padding: 0 12px; border-radius: 7px; color: var(--text-2); font-size: 12.5px; border: 1px solid transparent; }
+.w-sm { width: 140px; } .w-md { width: 300px; }
+.toggle { width: 40px; height: 22px; border-radius: 999px; background: rgba(255,255,255,.16); position: relative; flex-shrink: 0; transition: background .15s; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s, background .15s; }
+.toggle.on { background: #f5f5f5; } .toggle.on::after { transform: translateX(18px); background: #0c0c0c; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: 12.5px; border: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+.pill.ok { color: var(--ok); border-color: rgba(74,222,128,.3); } .pill.max { color: #f6e3a8; border-color: rgba(246,227,168,.35); }
+.pill.bad { color: var(--err); border-color: rgba(252,165,165,.3); } .pill.warn { color: #fcd9a8; border-color: rgba(245,180,90,.3); }
+.seg { display: inline-flex; padding: 3px; border-radius: 10px; gap: 3px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); }
+.seg button { height: 30px; padding: 0 14px; border-radius: 7px; color: var(--text-2); font-size: 14px; border: 1px solid transparent; }
 .seg button.on { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.12); }
-.pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; border: 1px solid var(--border); background: rgba(255,255,255,.04); color: var(--text-2); }
-.pill.max { color: #f6e3a8; border-color: rgba(246,227,168,.35); }
-.pill.on { color: var(--ok); border-color: rgba(74,222,128,.3); }
-.pill.bad { color: var(--err); border-color: rgba(252,165,165,.3); }
-.log { margin: 0; padding: 12px 14px; max-height: 320px; min-height: 140px; overflow: auto; font-family: var(--mono); font-size: 12px; line-height: 1.55; color: #d4d4d4; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,.25); }
+.log { margin: 0; padding: 14px 16px; max-height: 340px; min-height: 140px; overflow: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: #d4d4d4; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,.3); }
 .bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
 .bar > div { height: 100%; background: linear-gradient(90deg, #ef4444, #f97316); transition: width .3s; }
-.status-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
-.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); }
-.sdot.on { background: var(--ok); box-shadow: 0 0 10px rgba(74,222,128,.6); }
-.sdot.busy { background: var(--warn); }
-.copyable { display: flex; gap: 8px; align-items: center; }
-.newkey { border: 1px dashed rgba(255,255,255,.18); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; word-break: break-all; background: rgba(0,0,0,.25); user-select: all; }
+.newkey { border: 1px dashed rgba(255,255,255,.2); border-radius: 10px; padding: 12px 14px; font-family: var(--mono); font-size: 13.5px; word-break: break-all; background: rgba(0,0,0,.3); user-select: all; }
+.search { display: flex; gap: 10px; margin-bottom: 18px; }
+
+/* menus / popovers */
+.pop { position: fixed; z-index: 70; min-width: 230px; padding: 6px; border-radius: 12px; background: rgba(24,24,24,.98); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 24px 60px -20px rgba(0,0,0,.9); }
+.pop button { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%; height: 36px; padding: 0 12px; border-radius: 8px; font-size: 14px; color: #e5e5e5; text-align: left; }
+.pop button:hover { background: rgba(255,255,255,.08); }
+.pop button .k { color: var(--text-3); font-size: 12.5px; }
+.pop button.sel { color: #fff; } .pop button.sel::after { content: '✓'; color: var(--ok); }
+.pop .sep { height: 1px; margin: 5px 4px; background: var(--line); }
+.pop .lbl { padding: 8px 12px 4px; font-size: 12px; color: var(--text-3); }
 
 /* chat */
 .chat { display: flex; flex-direction: column; height: 100%; }
 .msgs { flex: 1; overflow-y: auto; }
-.msgs .inner { padding-top: 26px; }
-.msg { margin: 0 8px 22px; }
-.who { font-size: 12.5px; color: var(--text-3); margin-bottom: 6px; display: flex; align-items: center; gap: 7px; }
-.who img { width: 15px; height: 15px; border-radius: 4px; }
-.bubble { display: inline-block; max-width: 100%; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); white-space: pre-wrap; line-height: 1.55; font-size: 14px; }
-.reply { white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: #ececec; }
-.reply pre { white-space: pre; overflow-x: auto; background: rgba(0,0,0,.35); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; }
-.reply code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 5px; }
+.msgs .inner { padding-top: 34px; max-width: 900px; }
+.msg { margin: 0 0 24px; }
+.who { font-size: 13.5px; color: var(--text-3); margin-bottom: 7px; display: flex; align-items: center; gap: 8px; }
+.who img { width: 16px; height: 16px; border-radius: 4px; }
+.bubble { display: inline-block; max-width: 100%; padding: 11px 15px; border-radius: 13px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); white-space: pre-wrap; line-height: 1.55; font-size: 15px; }
+.reply { white-space: pre-wrap; line-height: 1.62; font-size: 15px; color: #ececec; }
+.reply pre { white-space: pre; overflow-x: auto; background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; font-family: var(--mono); font-size: 13px; }
+.reply code { font-family: var(--mono); font-size: 13px; background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 5px; }
 .reply pre code { background: none; padding: 0; }
-.composer-wrap { padding: 0 28px 22px; }
-.composer { width: min(800px, 100%); margin: 0 auto; border-radius: 18px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.11); box-shadow: 0 18px 50px -22px rgba(0,0,0,.8); padding: 12px 12px 10px 16px; }
-.composer textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; font-size: 14px; line-height: 1.5; min-height: 44px; max-height: 200px; }
-.composer .cbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.send { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; }
-.chat-foot { text-align: center; font-size: 11.5px; color: var(--text-3); margin-top: 8px; }
+.composer-wrap { padding: 0 34px 24px; }
+.composer { width: min(860px, 100%); margin: 0 auto; border-radius: 20px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.12); padding: 14px 14px 12px 18px; }
+.composer textarea { width: 100%; resize: none; border: 0; outline: none; background: transparent; font-size: 15.5px; line-height: 1.5; min-height: 48px; max-height: 220px; }
+.cbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cbar select { height: 34px; width: auto; max-width: 340px; font-size: 13.5px; border-radius: 9px; }
+.send { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
 .dots { display: inline-flex; gap: 5px; padding: 8px 0; }
 .dots span { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: dot 1.2s infinite ease-in-out; }
 .dots span:nth-child(2) { animation-delay: .15s; } .dots span:nth-child(3) { animation-delay: .3s; }
 @keyframes dot { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
 
 /* overlays */
-.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.55); backdrop-filter: blur(6px); }
-.modal { width: min(420px, 92vw); padding: 26px 26px 20px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; background: rgba(27,27,27,.92); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 30px 80px -30px rgba(0,0,0,.9), inset 0 1px rgba(255,255,255,.08); }
-.modal img { width: 48px; height: 48px; border-radius: 12px; }
-.modal h3 { margin: 6px 0 0; font-size: 18px; font-weight: 600; }
-.modal p { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); }
+.modal { width: min(440px, 92vw); padding: 28px 28px 22px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 9px; background: rgba(24,24,24,.96); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 30px 80px -30px rgba(0,0,0,.9); }
+.modal img { width: 52px; height: 52px; border-radius: 13px; }
+.modal h3 { margin: 6px 0 0; font-size: 20px; font-weight: 600; }
+.modal p { margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.5; }
 .modal .bar { width: 100%; margin-top: 8px; }
-.modal .mrow { display: flex; gap: 8px; margin-top: 12px; width: 100%; justify-content: center; }
-.modal .mrow .btn { min-width: 110px; height: 34px; }
-.setup { width: min(520px, 92vw); align-items: stretch; text-align: left; }
-.setup .head { display: flex; gap: 12px; align-items: center; }
-.setup .log { max-height: 220px; min-height: 120px; border-radius: 10px; border: 1px solid var(--border); }
-.toast-wrap { position: fixed; right: 18px; bottom: 18px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
-.toast { padding: 10px 14px; border-radius: 10px; font-size: 13px; background: rgba(27,27,27,.94); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 40px -16px rgba(0,0,0,.8); animation: tin .18s ease-out; }
+.modal .mrow { display: flex; gap: 10px; margin-top: 14px; width: 100%; justify-content: center; }
+.modal .mrow .btn { min-width: 120px; }
+.setup { width: min(560px, 92vw); align-items: stretch; text-align: left; }
+.setup .head2 { display: flex; gap: 14px; align-items: center; }
+.setup .log { max-height: 230px; min-height: 120px; border-radius: 10px; border: 1px solid var(--line); }
+.toast-wrap { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 80; }
+.toast { padding: 11px 15px; border-radius: 11px; font-size: 14px; background: rgba(27,27,27,.96); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 40px -16px rgba(0,0,0,.8); max-width: 460px; }
 .toast.bad { border-color: rgba(252,165,165,.35); }
-@keyframes tin { from { opacity: 0; transform: translateY(6px); } }
+@media (max-width: 1250px) { .side { width: 330px; } .tb-left { width: 316px; } .inner { padding: 36px 32px 60px; } }
 </style>
 </head>
 <body>
-<div class="orbs"><span class="o1"></span><span class="o2"></span></div>
 <div class="app">
-  <aside class="side">
-    <div class="brand"><img src="/icon.png" alt=""><span class="n">LAUNCH</span></div>
-    <nav class="nav" id="nav"></nav>
-    <div class="side-foot">
-      <div id="upd"></div>
-      <div class="hw"><div class="ic" id="hwic"></div><div><div id="hwname">Setting up…</div><div class="v" id="ver"></div></div></div>
+  <div class="titlebar">
+    <div class="brand"><img src="/icon.png" alt=""><span>LAUNCH</span></div>
+    <div class="menus" id="menus"><button data-menu="file">File</button><button data-menu="edit">Edit</button><button data-menu="view">View</button><button data-menu="help">Help</button></div>
+  </div>
+  <div class="toolbar">
+    <div class="tb-left">
+      <button class="ib" data-act="toggle-side" title="Toggle sidebar"></button>
+      <button class="ib" data-go="discover" title="Search models"></button>
+      <span class="sp"></span>
+      <button class="ib" data-act="back" id="back" title="Back"></button>
+      <button class="ib" data-act="fwd" id="fwd" title="Forward"></button>
     </div>
-  </aside>
-  <main class="main" id="main"></main>
+    <div class="tb-right">
+      <button class="srv-pill off" id="pill" data-go="server"><span class="d"></span><span id="pilltxt">Server off</span></button>
+      <button class="btn sm" data-act="api" title="Copy the API URL">API <svg class="i sm" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></svg></button>
+      <button class="ib" data-menu="more" title="More"></button>
+    </div>
+  </div>
+  <div class="body">
+    <aside class="side" id="side"></aside>
+    <main class="main" id="main"></main>
+  </div>
 </div>
 <div id="overlay"></div>
+<div id="popwrap"></div>
 <div class="toast-wrap" id="toasts"></div>
 <script>
 const TOKEN = '__TOKEN__';
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const I = {
-  models: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+  newchat: '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+  discover: '<circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"/>',
+  models: '<path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85M7 16.5l5-3M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3M17 16.5l4.74-2.85M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15M12 8l4.74-2.85M12 13.5V8"/>',
+  keys: '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>',
   server: '<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
-  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-  keys: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
-  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  map: '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15M9 3.236v15"/>',
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
-  cpu: '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2"/>',
+  sidebar: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  left: '<path d="m12 19-7-7 7-7M19 12H5"/>', right: '<path d="M5 12h14M12 5l7 7-7 7"/>',
+  more: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
   down: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
-  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M12 12v6M9 15h6"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>', stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
-  stop: '<rect x="5" y="5" width="14" height="14" rx="2"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>', plus: '<path d="M12 5v14M5 12h14"/>',
   refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
-  folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>',
-  loader: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>',
+  loader: '<path d="M21 12a9 9 0 1 1-6.22-8.56"/>', heart: '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
 };
 const icon = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24">${I[n]}</svg>`;
-const SUGGEST = ['Qwen/Qwen2.5-Coder-1.5B-Instruct', 'Qwen/Qwen2.5-Coder-7B-Instruct', 'unsloth/gemma-3-1b-it', 'google/gemma-3-1b-it', 'Qwen/Qwen3-4B', 'Qwen/Qwen3-8B', 'meta-llama/Llama-3.2-3B-Instruct', 'mistralai/Mistral-7B-Instruct-v0.3'];
-const PAGES = [['models', 'Models', 'models'], ['server', 'Server', 'server'], ['chat', 'Chat', 'chat'], ['keys', 'API Keys', 'keys'], ['users', 'Accounts', 'users'], ['settings', 'Settings', 'settings']];
+const PICKS = [
+  ['Qwen/Qwen2.5-Coder-1.5B-Instruct', 'Small, fast coder · ~3 GB'], ['Qwen/Qwen2.5-Coder-7B-Instruct', 'Strong coder · ~15 GB'],
+  ['Qwen/Qwen3-4B', 'Reasoning + coding · ~8 GB'], ['unsloth/gemma-3-1b-it', 'Tiny Gemma 3 · ~2 GB'],
+  ['microsoft/Phi-4-mini-instruct', 'Phi-4 mini · ~7.7 GB'], ['meta-llama/Llama-3.2-3B-Instruct', 'Llama 3.2 · gated · ~6.4 GB'],
+  ['HuggingFaceTB/SmolLM3-3B', 'SmolLM3 · ~6 GB'], ['ibm-granite/granite-3.3-2b-instruct', 'Granite 3.3 · ~5 GB'],
+];
+const NAV = [['chat', 'New Chat', 'newchat'], ['discover', 'Discover', 'discover'], ['models', 'Models', 'models'], ['keys', 'API Keys', 'keys'], ['server', 'Server', 'server']];
 
-let S = null, page = 'models', lists = { models: null, keys: null, users: null }, newKey = null, keyForm = false;
-let chat = [], streaming = null, updDismissed = null, updTried = false;
-const draft = {}; // server settings being edited (kept across re-renders)
+let S = null, page = 'models', hist = ['models'], hpos = 0, sideHidden = false;
+let lists = { models: null, keys: null, users: null }, mapData = null, disc = { q: '', res: null, busy: false, err: null };
+let newKey = null, keyForm = false, chat = [], streaming = null, chatModel = '', updDismissed = null, updTried = false;
+const draft = {};
 
-const GONE = 'Launch isn’t running any more — close this window and open Launch again.';
 async function api(path, body) {
   let r;
-  try { r = await fetch('/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }); } catch { throw new Error(GONE); }
+  try { r = await fetch('/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch { throw new Error('Launch isn’t running any more — close this window and open Launch again.'); }
   const j = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (!r.ok) throw new Error(j?.error || `Error ${r.status}`);
   return j;
 }
-function toast(text, bad) {
-  const el = document.createElement('div'); el.className = 'toast' + (bad ? ' bad' : ''); el.textContent = text;
-  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3800);
-}
-const act = async (fn, okMsg) => { try { const r = await fn(); if (okMsg) toast(okMsg); return r; } catch (e) { toast(e.message, true); } };
+function toast(text, bad) { const el = document.createElement('div'); el.className = 'toast' + (bad ? ' bad' : ''); el.textContent = text; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4200); }
+const act = async (fn, okMsg) => { try { const r = await fn(); if (okMsg) toast(okMsg); return r; } catch (e) { if (e.message !== 'cancelled') toast(e.message, true); } };
 async function load(kind) { try { lists[kind] = await api(kind); } catch (e) { lists[kind] = { error: e.message }; } render(); }
+async function loadMap() { try { mapData = await api('map'); } catch {} render(); }
+const ago = (t) => { if (!t) return ''; const s = Date.now() / 1000 - t; return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
+const gb = (g) => g >= 1 ? `${g} GB` : `${Math.round(g * 1000)} MB`;
+const fmtN = (n) => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n || 0);
 
-// ---------- shell ----------
-function renderNav() {
-  const sv = S?.server || {};
-  $('#nav').innerHTML = PAGES.map(([id, label, ic]) => `<button class="${page === id ? 'on' : ''}" data-go="${id}">${icon(ic)}${label}${id === 'server' && sv.running ? '<span class="dot"></span>' : ''}${id === 'models' && Array.isArray(lists.models) && lists.models.length ? `<span class="badge">${lists.models.length}</span>` : ''}</button>`).join('');
-  $('#hwic').innerHTML = icon('cpu');
-  $('#hwname').textContent = S?.setup.ready ? S.setup.hw : S?.setup.error ? 'Setup failed' : 'Setting up…';
-  $('#ver').textContent = S ? `Launch ${S.version}${S.setup.torch ? ' · PyTorch ' + S.setup.torch : ''}` : '';
-  const u = S?.update;
-  $('#upd').innerHTML = u?.available ? `<button class="btn grad" style="width:100%;height:32px" data-act="upd-open">${icon('up')} Update to ${esc(u.available.version)}</button>` : '';
+function go(p, push = true) {
+  if (push && p !== page) { hist = hist.slice(0, hpos + 1); hist.push(p); hpos = hist.length - 1; }
+  page = p;
+  if (['models', 'keys', 'server', 'chat'].includes(p)) load('models');
+  if (p === 'keys') { load('keys'); load('users'); }
+  if (p === 'discover' && !disc.res && !disc.busy) search('');
+  render();
+  if (p === 'chat') setTimeout(() => $('#prompt')?.focus(), 30);
+  if (p === 'discover') setTimeout(() => $('#q')?.focus(), 30);
 }
-function go(p) { page = p; if (['models', 'keys', 'users'].includes(p)) load(p); if (p === 'server' && !lists.models) load('models'); render(); if (p === 'chat') setTimeout(() => $('#prompt')?.focus(), 30); }
+
+// ---------- chrome ----------
+function renderChrome() {
+  $('[data-act=toggle-side]').innerHTML = icon('sidebar'); $('[data-go=discover].ib').innerHTML = icon('search');
+  $('#back').innerHTML = icon('left'); $('#fwd').innerHTML = icon('right'); $('[data-menu=more]').innerHTML = icon('more');
+  $('#back').disabled = hpos <= 0; $('#fwd').disabled = hpos >= hist.length - 1;
+  const sv = S.server, pill = $('#pill');
+  pill.className = 'srv-pill ' + (sv.running ? '' : sv.starting ? 'busy' : 'off');
+  $('#pilltxt').textContent = sv.running ? `Server on :${sv.port}${sv.engine?.loading ? ' · loading…' : ''}` : sv.starting ? 'Starting server…' : 'Server off';
+  $('#side').classList.toggle('hidden', sideHidden);
+}
+function gsSteps() {
+  const ms = Array.isArray(lists.models) ? lists.models : [], ks = Array.isArray(lists.keys) ? lists.keys : [];
+  return [
+    { t: 'Download a model', done: ms.length > 0, cta: 'Download a model', icon: 'down', run: () => go('discover') },
+    { t: 'Create an API key', done: ks.some((k) => !k.install && !k.account && k.name !== 'Launch app'), cta: 'Create API key', icon: 'keys', run: () => { keyForm = true; go('keys'); } },
+    { t: 'Connect KSTRL', done: ks.some((k) => k.install || k.account), cta: 'Connect KSTRL', icon: 'server', run: () => go('server') },
+  ];
+}
+function renderSide() {
+  const ms = Array.isArray(lists.models) ? lists.models : [];
+  const m = mapData?.map || {}, slots = mapData?.slots || [];
+  const steps = gsSteps(), done = steps.filter((s) => s.done).length, next = steps.find((s) => !s.done);
+  const ring = `<svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="2"/><circle cx="10" cy="10" r="8" fill="none" stroke="#e5e5e5" stroke-width="2" stroke-dasharray="${(done / 3) * 50.3} 50.3" transform="rotate(-90 10 10)" stroke-linecap="round"/></svg>`;
+  $('#side').innerHTML = `
+    <nav class="nav">${NAV.map(([id, label, ic]) => `<button class="${page === id ? 'on' : ''}" data-go="${id}"${id === 'chat' ? ' data-act="newchat"' : ''}>${icon(ic)}${label}${id === 'models' && ms.length ? `<span class="badge">${ms.length}</span>` : ''}</button>`).join('')}</nav>
+    <div class="sec-h">Model map <span title="Which local model answers each Colossus model in KSTRL">${icon('map', 'sm')}</span></div>
+    <div class="map">${slots.map((s) => `<button class="${m[s.id] ? 'on' : ''}" data-map="${s.id}" title="${m[s.id] ? esc(m[s.id]) : 'Not mapped — uses whatever model is loaded'}"><span class="dot"></span><span class="nm">${esc(s.name)}${m[s.id] ? `<span class="to">${esc(m[s.id])}</span>` : ''}</span><span class="w">${esc(s.weight)}</span></button>`).join('')}</div>
+    ${next ? `<div class="gs"><div class="gs-h">Getting Started <span class="n">${done}/3 ${ring}</span></div>
+      ${steps.map((s) => `<div class="gs-step ${s.done ? 'done' : ''}"><span class="c"></span>${s.t}</div>`).join('')}
+      <button class="btn grad cta" data-act="gs">${icon(next.icon, 'sm')} ${next.cta}</button></div>` : '<div style="height:18px"></div>'}
+    <div class="side-foot"><div class="avatar">L</div><div class="nm">Launch</div><button class="ib" data-go="settings" title="Settings">${icon('settings')}</button></div>`;
+}
 
 // ---------- pages ----------
 function pageModels() {
-  const d = S.download, ms = lists.models;
+  const ms = lists.models, d = S.download;
   return `<div class="inner">
-  <div class="title">Models</div><div class="subtitle">Download models from Hugging Face and run them with the Launch engine. Supported: Llama, Mistral, Qwen2, Qwen3 and Gemma 1/2/3 (text).</div>
-  <div class="sec"><div class="sec-t">Download from Hugging Face</div><div class="card">
-    <div class="row col">
-      <div class="txt"><div class="t">Repository</div><div class="d">The model's id on huggingface.co, like owner/name. Pick one or type your own.</div></div>
-      <div style="display:flex;gap:8px"><input class="input mono" id="repo" list="sugg" placeholder="Qwen/Qwen2.5-Coder-7B-Instruct" value="${esc($('#repo')?.value || '')}"><datalist id="sugg">${SUGGEST.map((s) => `<option value="${s}">`).join('')}</datalist>
-      <button class="btn light" data-act="pull" ${d.busy ? 'disabled' : ''}>${d.busy ? icon('loader', 'spin') : icon('down')} Download</button></div>
-    </div>
-    <div class="row"><div class="txt"><div class="t">Hugging Face token <span class="muted" style="font-size:12px">optional</span></div><div class="d">Only for gated models (like google/gemma). Accept the model's license on its page first.</div></div><input class="input md" id="hftoken" type="password" placeholder="hf_…" value="${esc($('#hftoken')?.value || '')}"></div>
-    ${d.busy || d.error || d.done ? `<div class="row"><div class="txt"><div class="t">${d.busy ? `Downloading ${esc(d.repo)}` : d.error ? '<span class="err">Download failed</span>' : `<span class="ok">Downloaded ${esc(d.done)}</span>`}</div><div class="d mono" style="font-size:12px">${esc(d.busy ? d.line : d.error || 'Ready to use — pick it on the Server page.')}</div>${d.busy ? `<div class="bar" style="margin-top:10px"><div style="width:${(d.line.match(/(\d+)%/) || [0, 2])[1]}%"></div></div>` : ''}</div></div>` : ''}
-  </div></div>
-  <div class="sec"><div class="sec-t">Downloaded <button class="btn ghost" data-act="reload-models">${icon('refresh')}</button></div><div class="card">
-    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ms ? '<div class="empty">Loading…</div>' : ms.error ? `<div class="empty err">${esc(ms.error)}</div>` : !ms.length ? '<div class="empty">No models yet. Download one above — Qwen2.5-Coder-1.5B-Instruct is a quick start.</div>' :
-      ms.map((m) => `<div class="row"><div class="txt"><div class="t mono" style="font-size:13.5px">${esc(m.id)}</div><div class="d">${esc(m.arch)} · ${m.gb} GB${S.server.model === m.id && S.server.running ? ' · <span class="ok">running</span>' : ''}</div></div>
-        <div class="acts"><button class="btn" data-act="use" data-id="${esc(m.id)}">${icon('play')} Use</button><button class="btn ghost danger" data-act="rm" data-id="${esc(m.id)}" title="Delete">${icon('trash')}</button></div></div>`).join('')}
-  </div></div></div>`;
+    <div class="head"><div><h1>Models</h1><p>Models downloaded to this PC. Load one to keep it ready, or let Launch load it on the first request.</p></div>
+      <div class="acts"><button class="btn big" data-act="addfolder">${icon('file')} Add from file</button><button class="btn big grad" data-go="discover">${icon('down')} Download models</button></div></div>
+    ${d.busy || d.error ? dlCard() : ''}
+    <div class="sub-h">Installed <button class="btn ghost sm" data-act="reload-models" title="Refresh">${icon('refresh', 'sm')}</button></div>
+    <div class="card">${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ms ? '<div class="empty">Loading…</div>' : ms.error ? `<div class="empty err">${esc(ms.error)}</div>` : !ms.length ? '<div class="empty">No models yet. Click <b>Download models</b> to get one.</div>' : `
+      <table><tr><th style="width:52%">Model</th><th>Size</th><th>Used by</th><th>Status</th><th></th></tr>
+      ${ms.map((x) => `<tr><td><div class="mname">${esc(x.id)}</div><div class="mmeta">${esc(x.arch)}${x.local ? ' · added from a folder' : ''}${x.added ? ' · added ' + ago(x.added) : ''}</div></td>
+        <td>${gb(x.gb)}</td><td>${x.used_by.length ? esc(x.used_by.join(', ')) : '<span class="muted">—</span>'}</td>
+        <td>${x.status === 'loaded' ? '<span class="ok">Loaded</span>' : x.status === 'loading' ? '<span class="warn">Loading…</span>' : '<span class="muted">Not loaded</span>'}</td>
+        <td style="text-align:right;white-space:nowrap">${x.status === 'loaded' ? `<button class="btn sm" data-act="unload">${icon('stop', 'sm')} Unload</button>` : `<button class="btn sm" data-act="loadm" data-id="${esc(x.id)}" ${S.server.running && x.status !== 'loading' ? '' : 'disabled'}>${icon('play', 'sm')} Load</button>`}
+          <button class="icon-del" data-act="rm" data-id="${esc(x.id)}" title="Delete" style="display:inline-grid;vertical-align:middle;margin-left:8px">${icon('trash', 'sm')}</button></td></tr>`).join('')}</table>`}</div></div>`;
+}
+function dlCard() {
+  const d = S.download;
+  return `<div class="card"><div class="row col"><div class="txt"><div class="t">${d.busy ? `Downloading ${esc(d.repo)}` : `<span class="err">Couldn't download ${esc(d.repo)}</span>`}</div><div class="d mono" style="font-size:12.5px">${esc(d.busy ? d.line : d.error)}</div></div>
+    ${d.busy ? `<div class="bar"><div style="width:${(d.line.match(/(\d+)%/) || [0, 2])[1]}%"></div></div>` : ''}</div></div>`;
+}
+function pageDiscover() {
+  const d = S.download, res = disc.res;
+  const have = new Set((Array.isArray(lists.models) ? lists.models : []).map((m) => m.id));
+  const rowFor = (id, note, info = {}) => `<div class="row"><div class="txt"><div class="t mono" style="font-size:14.5px">${esc(id)}</div><div class="d">${note}</div></div>
+    ${have.has(id) ? '<span class="pill ok">Downloaded</span>' : info.supported === false ? `<span class="pill ${info.quant ? 'bad' : 'warn'}">${info.quant ? 'Quantized — not supported' : 'Architecture not supported'}</span>` : `<button class="btn sm" data-act="pull" data-id="${esc(id)}" ${d.busy ? 'disabled' : ''}>${icon('down', 'sm')} Download</button>`}</div>`;
+  return `<div class="inner">
+    <div class="head"><div><h1>Discover</h1><p>Search Hugging Face for text models the Launch engine can run: Llama, Mistral, Qwen, Gemma, Phi, Granite, OLMo, StarCoder2, SmolLM and more. GGUF and 4-bit uploads aren't supported — pick the original repo.</p></div></div>
+    ${d.busy || d.error || d.done ? (d.done && !d.busy && !d.error ? `<div class="card"><div class="row"><div class="txt"><div class="t ok">Downloaded ${esc(d.done)}</div><div class="d">It's on the Models page. Map it to a Colossus model in the sidebar to use it from KSTRL.</div></div><button class="btn sm" data-go="models">Open Models</button></div></div>` : dlCard()) : ''}
+    <div class="search"><input class="input" id="q" placeholder="Search models, e.g. qwen coder, gemma, phi" value="${esc(disc.q)}"><button class="btn light" data-act="search">${disc.busy ? icon('loader', 'spin sm') : icon('search', 'sm')} Search</button></div>
+    <div class="card"><div class="row"><div class="txt"><div class="t">Repo id or link</div><div class="d">Paste any Hugging Face model, like owner/name.</div></div><input class="input w-md mono" id="repo" placeholder="owner/name"><button class="btn sm" data-act="pull-typed" ${d.busy ? 'disabled' : ''}>${icon('down', 'sm')} Download</button></div>
+      <div class="row"><div class="txt"><div class="t">Hugging Face token <span class="muted" style="font-size:12.5px">optional</span></div><div class="d">Only for gated models (Llama, Gemma from google/…). Accept the license on the model's page first.</div></div><input class="input w-md" id="hftoken" type="password" placeholder="hf_…" value="${esc($('#hftoken')?.value || '')}"></div></div>
+    <div class="sub-h">${disc.q ? `Results for “${esc(disc.q)}”` : 'Popular picks'}</div>
+    <div class="card">${disc.q
+      ? (disc.err ? `<div class="empty err">${esc(disc.err)}</div>` : !res ? '<div class="empty">Searching…</div>' : !res.length ? '<div class="empty">No text models found.</div>' :
+          res.map((m) => rowFor(m.id, `${m.arch ? esc(m.arch) + ' · ' : ''}${fmtN(m.downloads)} downloads · ${fmtN(m.likes)} likes${m.gated ? ' · gated' : ''}`, m)).join(''))
+      : PICKS.map(([id, note]) => rowFor(id, esc(note))).join('')}</div></div>`;
 }
 function pageServer() {
-  const sv = S.server, ms = Array.isArray(lists.models) ? lists.models : [];
-  const c = { ...S.cfg, ...draft };
-  const model = (sv.running || sv.starting ? sv.model : draft.model) || c.model || ms[0]?.id || '';
-  const busy = sv.starting, on = sv.running;
+  const sv = S.server, c = { ...S.cfg, ...draft }, e = sv.engine || {};
   const url = sv.url || `http://127.0.0.1:${c.port || 8000}/v1`;
   return `<div class="inner">
-  <div class="title">Server</div><div class="subtitle">An OpenAI-compatible API for KSTRL and other apps.</div>
-  <div class="sec"><div class="card">
-    <div class="row"><div class="status-line"><span class="sdot ${on ? 'on' : busy ? 'busy' : ''}"></span>${on ? `Running <span class="mono" style="color:var(--text)">${esc(sv.model)}</span>` : busy ? `Loading ${esc(sv.model)}…` : sv.error ? `<span class="err">${esc(sv.error)}</span>` : 'Stopped'}</div>
-      ${on || busy ? `<button class="btn" data-act="stop">${icon('stop')} Stop</button>` : `<button class="btn light" data-act="start" ${!S.setup.ready || !ms.length ? 'disabled' : ''}>${icon('play')} Start server</button>`}</div>
-    <div class="row"><div class="txt"><div class="t">API URL</div><div class="d">In KSTRL: Settings → Models → Model Server → OpenAI-compatible, then paste this. KSTRL creates its own key.</div></div>
-      <div class="copyable"><span class="mono" style="font-size:12.5px">${esc(url)}</span><button class="btn" data-act="copy" data-text="${esc(url)}">${icon('copy')}</button></div></div>
-  </div></div>
-  <div class="sec"><div class="sec-t">Settings</div><div class="card">
-    <div class="row"><div class="txt"><div class="t">Model</div><div class="d">${ms.length ? 'Which downloaded model to serve.' : 'Download a model on the Models page first.'}</div></div>
-      <select class="input md mono" id="sv-model" ${on || busy ? 'disabled' : ''}>${ms.map((m) => `<option ${m.id === model ? 'selected' : ''}>${esc(m.id)}</option>`).join('')}</select></div>
-    <div class="row"><div class="txt"><div class="t">Port</div><div class="d">KSTRL's sign-up screen expects 8000.</div></div><input class="input sm mono" id="sv-port" value="${esc(c.port || 8000)}" ${on || busy ? 'disabled' : ''}></div>
-    <div class="row"><div class="txt"><div class="t">Context</div><div class="d">Tokens the model can see at once. Keep it at least as big as KSTRL's context window (12k).</div></div>
-      <select class="input sm" id="sv-ctx" ${on || busy ? 'disabled' : ''}>${[8192, 12288, 16384, 32768].map((n) => `<option value="${n}" ${+(c.ctx || 16384) === n ? 'selected' : ''}>${n / 1024}k</option>`).join('')}</select></div>
-    <div class="row"><div class="txt"><div class="t">Allow other devices</div><div class="d">Listen on your network so other PCs (or the internet, with port forwarding) can connect.</div></div><button class="toggle ${c.public ? 'on' : ''}" data-tog="public" ${on || busy ? 'disabled' : ''}></button></div>
-    <div class="row"><div class="txt"><div class="t">Require API keys</div><div class="d">Recommended. KSTRL gets a key automatically; accounts and usage limits need this on.</div></div><button class="toggle ${c.auth !== false ? 'on' : ''}" data-tog="auth" ${on || busy ? 'disabled' : ''}></button></div>
-  </div></div>
-  <div class="sec"><div class="sec-t">Log</div><div class="card"><pre class="log" id="svlog">${esc(sv.log.map((l) => l.replace(/^\r/, '')).join('\n')) || 'The server log shows here.'}</pre></div></div></div>`;
+    <div class="head"><div><h1>Server</h1><p>Launch's OpenAI-compatible API. It starts with Launch; KSTRL and other apps connect to it with an API key.</p></div>
+      <div class="acts">${sv.running || sv.starting ? `<button class="btn big" data-act="restart">${icon('refresh')} Restart</button><button class="btn big" data-act="stop">${icon('stop')} Stop</button>` : `<button class="btn big grad" data-act="start" ${S.setup.ready ? '' : 'disabled'}>${icon('play')} Start server</button>`}</div></div>
+    <div class="card">
+      <div class="row"><div class="txt"><div class="t">Status</div><div class="d">${sv.running ? `<span class="ok">Running</span> on port ${esc(sv.port)}${sv.public ? ' · open to your network' : ' · this PC only'}` : sv.starting ? 'Starting…' : sv.error ? `<span class="err">${esc(sv.error)}</span>` : 'Stopped'}</div></div></div>
+      <div class="row"><div class="txt"><div class="t">API URL</div><div class="d">In KSTRL: Settings → Models → Model Server → OpenAI-compatible, or sign up there — KSTRL gets a key by itself.</div></div><span class="mono" style="font-size:13.5px">${esc(url)}</span><button class="btn sm" data-act="copy" data-text="${esc(url)}">${icon('copy', 'sm')} Copy</button></div>
+      <div class="row"><div class="txt"><div class="t">Loaded model</div><div class="d">${e.loaded ? `<span class="mono">${esc(e.loaded)}</span> · ${esc(e.device)} (${esc(e.dtype)})${e.note ? `<br><span class="warn">${esc(e.note)}</span>` : ''}` : e.loading ? `Loading ${esc(e.loading)}…` : e.error ? `<span class="err">${esc(e.error)}</span>` : 'None — models load on the first request or with Load on the Models page.'}</div></div>${e.loaded ? `<button class="btn sm" data-act="unload">Unload</button>` : ''}</div>
+    </div>
+    <div class="sub-h">Settings</div>
+    <div class="card">
+      <div class="row"><div class="txt"><div class="t">Port</div><div class="d">KSTRL's sign-up screen expects 8000.</div></div><input class="input w-sm mono" id="sv-port" value="${esc(c.port || 8000)}"></div>
+      <div class="row"><div class="txt"><div class="t">Context</div><div class="d">Tokens a model can see at once. Keep it at least as big as KSTRL's context window (12k).</div></div>
+        <select class="input w-sm" id="sv-ctx">${[8192, 12288, 16384, 32768].map((n) => `<option value="${n}" ${+(c.ctx || 16384) === n ? 'selected' : ''}>${n / 1024}k</option>`).join('')}</select></div>
+      <div class="row"><div class="txt"><div class="t">Allow other devices</div><div class="d">Listen on your network so other PCs (or the internet, with port forwarding) can connect.</div></div><button class="toggle ${c.public ? 'on' : ''}" data-tog="public"></button></div>
+      <div class="row"><div class="txt"><div class="t">Require API keys</div><div class="d">Recommended. Accounts and usage limits need this on.</div></div><button class="toggle ${c.auth !== false ? 'on' : ''}" data-tog="auth"></button></div>
+      ${Object.keys(draft).length ? `<div class="row"><div class="txt"><div class="d">Changes apply when the server restarts.</div></div><button class="btn light" data-act="restart">Save &amp; restart</button></div>` : ''}
+    </div>
+    <div class="sub-h">Log</div><div class="card"><pre class="log" id="svlog">${esc(sv.log.map((l) => l.replace(/^\r/, '')).join('\n')) || 'The server log shows here.'}</pre></div></div>`;
 }
 function md(text) {
-  const parts = String(text).split(/```/);
-  return parts.map((p, i) => {
+  return String(text).split(/```/).map((p, i) => {
     if (i % 2) { const nl = p.indexOf('\n'); return `<pre><code>${esc(nl >= 0 ? p.slice(nl + 1) : p)}</code></pre>`; }
     return esc(p).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
   }).join('');
 }
 function pageChat() {
-  const sv = S.server;
+  const sv = S.server, ms = Array.isArray(lists.models) ? lists.models : [];
   const msgs = chat.map((m) => m.role === 'user'
     ? `<div class="msg"><div class="who">You</div><div class="bubble">${esc(m.content)}</div></div>`
-    : `<div class="msg"><div class="who"><img src="/icon.png" alt="">Launch${sv.model ? ' · ' + esc(sv.model) : ''}</div><div class="reply">${m.content ? md(m.content) : '<span class="dots"><span></span><span></span><span></span></span>'}${m.error ? `<div class="err" style="margin-top:6px">${esc(m.error)}</div>` : ''}</div>${m.stats ? `<div class="muted" style="font-size:11.5px;margin-top:6px">${esc(m.stats)}</div>` : ''}</div>`).join('');
+    : `<div class="msg"><div class="who"><img src="/icon.png" alt="">${esc(m.model || 'Launch')}</div><div class="reply">${m.content ? md(m.content) : '<span class="dots"><span></span><span></span><span></span></span>'}${m.error ? `<div class="err" style="margin-top:6px">${esc(m.error)}</div>` : ''}</div>${m.stats ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(m.stats)}</div>` : ''}</div>`).join('');
+  const ok = sv.running && ms.length;
   return `<div class="chat"><div class="msgs" id="msgs"><div class="inner">
-    ${chat.length ? msgs : `<div style="text-align:center;margin-top:18vh"><img src="/icon.png" style="width:44px;height:44px;border-radius:11px"><div class="title" style="margin:14px 0 6px">Chat with your model</div><div class="subtitle" style="margin:0">${sv.running ? `Talking to <span class="mono">${esc(sv.model)}</span> on this PC.` : 'Start the server first — then test your model here.'}</div>${sv.running ? '' : '<div style="margin-top:14px"><button class="btn light" data-go="server">Go to Server</button></div>'}</div>`}
+    ${chat.length ? msgs : `<div style="text-align:center;margin-top:16vh"><img src="/icon.png" style="width:52px;height:52px;border-radius:13px"><h1 style="font-size:28px;font-weight:600;margin:16px 0 8px">What should we test?</h1><p class="muted" style="font-size:15.5px;margin:0">${!ms.length ? 'Download a model first.' : sv.running ? 'Chat with a model on this PC. It loads on the first message.' : 'Start the server to chat.'}</p>${!ms.length ? '<div style="margin-top:16px"><button class="btn grad big" data-go="discover">Download models</button></div>' : ''}</div>`}
   </div></div>
   <div class="composer-wrap"><div class="composer">
-    <textarea id="prompt" rows="2" placeholder="${sv.running ? 'Message ' + esc(sv.model) + '…' : 'Start the server to chat'}" ${sv.running ? '' : 'disabled'}>${esc($('#prompt')?.value || '')}</textarea>
-    <div class="cbar"><div>${chat.length ? `<button class="btn ghost" data-act="clear">${icon('trash')} Clear</button>` : ''}</div>
-      ${streaming ? `<button class="btn send" data-act="stopchat" title="Stop">${icon('stop')}</button>` : `<button class="send grad" data-act="send" title="Send" ${sv.running ? '' : 'disabled'}>${icon('up')}</button>`}</div>
-  </div><div class="chat-foot">Runs locally with the Launch engine.</div></div></div>`;
+    <textarea id="prompt" rows="2" placeholder="${ok ? 'Message the model…' : 'Download a model and start the server to chat'}" ${ok ? '' : 'disabled'}>${esc($('#prompt')?.value || '')}</textarea>
+    <div class="cbar"><select class="input" id="chatmodel">${ms.map((m) => `<option ${m.id === (chatModel || sv.model || ms[0]?.id) ? 'selected' : ''}>${esc(m.id)}</option>`).join('')}</select>
+      <div style="display:flex;gap:8px;align-items:center">${chat.length ? `<button class="btn ghost sm" data-act="clear">Clear</button>` : ''}${streaming ? `<button class="btn send" data-act="stopchat" title="Stop">${icon('stop', 'sm')}</button>` : `<button class="send grad" data-act="send" title="Send" ${ok ? '' : 'disabled'}>${icon('up', 'sm')}</button>`}</div></div>
+  </div></div></div>`;
 }
 function pageKeys() {
-  const ks = lists.keys;
+  const ks = lists.keys, us = lists.users;
   return `<div class="inner">
-  <div class="title">API Keys</div><div class="subtitle">KSTRL installs and accounts get keys automatically. Create one here for other apps. Launch only stores a hash of each key.</div>
-  ${newKey ? `<div class="sec"><div class="card"><div class="row col"><div class="txt"><div class="t ok">Your new key</div><div class="d">Copy it now — Launch won't show it again.</div></div><div class="newkey">${esc(newKey)}</div><div><button class="btn light" data-act="copy" data-text="${esc(newKey)}">${icon('copy')} Copy</button> <button class="btn ghost" data-act="hidekey">Done</button></div></div></div></div>` : ''}
-  <div class="sec"><div class="sec-t">Keys <span><button class="btn ghost" data-act="reload-keys">${icon('refresh')}</button> <button class="btn" data-act="keyform">${icon('plus')} Create key</button></span></div><div class="card">
-    ${keyForm ? `<div class="row"><input class="input" id="kname" placeholder="Name (optional), e.g. My app"><div class="seg" id="kplan"><button class="on" data-plan="free">Free</button><button data-plan="max">MAX</button></div><button class="btn light" data-act="createkey">Create</button></div>` : ''}
-    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ks ? '<div class="empty">Loading…</div>' : ks.error ? `<div class="empty err">${esc(ks.error)}</div>` : !ks.length ? '<div class="empty">No keys yet.</div>' :
-      ks.slice().reverse().map((k) => `<div class="row"><div class="txt"><div class="t"><span class="mono" style="font-size:13px">${esc(k.prefix)}…</span> <span class="pill ${k.plan === 'max' ? 'max' : ''}">${k.plan === 'max' ? 'MAX' : 'Free'}</span> ${k.state !== 'active' ? `<span class="pill bad">${esc(k.state)}</span>` : ''}</div>
-        <div class="d">${esc(k.email || k.name || (k.install ? 'KSTRL install (automatic)' : 'Manual key'))} · ${k.used} credits today</div></div>
-        ${k.state === 'active' ? `<div class="acts"><button class="btn" data-act="kplan" data-ref="${esc(k.prefix)}" data-val="${k.plan === 'max' ? 'free' : 'max'}">Make ${k.plan === 'max' ? 'Free' : 'MAX'}</button><button class="btn ghost danger" data-act="krevoke" data-ref="${esc(k.prefix)}">Revoke</button></div>` : ''}</div>`).join('')}
-  </div></div></div>`;
-}
-function pageUsers() {
-  const us = lists.users;
-  return `<div class="inner">
-  <div class="title">Accounts</div><div class="subtitle">People who signed up from KSTRL's Sign up screen. Usage is counted per account, across all their devices.</div>
-  <div class="sec"><div class="sec-t">Accounts <button class="btn ghost" data-act="reload-users">${icon('refresh')}</button></div><div class="card">
-    ${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !us ? '<div class="empty">Loading…</div>' : us.error ? `<div class="empty err">${esc(us.error)}</div>` : !us.length ? '<div class="empty">No accounts yet. They appear when someone signs up in KSTRL with this server.</div>' :
-      us.map((u) => `<div class="row"><div class="txt"><div class="t">${esc(u.email)} <span class="pill ${u.plan === 'max' ? 'max' : ''}">${u.plan === 'max' ? 'MAX' : 'Free'}</span> ${u.banned ? '<span class="pill bad">blocked</span>' : ''}</div><div class="d">${esc(u.name || '')}${u.name ? ' · ' : ''}${u.used} credits today</div></div>
-        ${u.banned ? '' : `<div class="acts"><button class="btn" data-act="uplan" data-email="${esc(u.email)}" data-val="${u.plan === 'max' ? 'free' : 'max'}">Make ${u.plan === 'max' ? 'Free' : 'MAX'}</button><button class="btn ghost danger" data-act="uban" data-email="${esc(u.email)}">Block</button></div>`}</div>`).join('')}
-  </div></div></div>`;
+    <div class="head"><div><h1>API Keys</h1><p>Apps use these to talk to Launch. KSTRL gets its own key automatically (or when someone signs up); make one here for anything else. Launch only stores a hash of each key.</p></div>
+      <div class="acts"><button class="btn big grad" data-act="keyform">${icon('plus')} Create API key</button></div></div>
+    ${newKey ? `<div class="card"><div class="row col"><div class="txt"><div class="t ok">Your new key</div><div class="d">Copy it now — Launch won't show it again.</div></div><div class="newkey">${esc(newKey)}</div><div><button class="btn light sm" data-act="copy" data-text="${esc(newKey)}">${icon('copy', 'sm')} Copy</button> <button class="btn ghost sm" data-act="hidekey">Done</button></div></div></div>` : ''}
+    ${keyForm ? `<div class="card"><div class="row"><input class="input" id="kname" placeholder="Name, e.g. My app"><div class="seg" id="kplan"><button class="on" data-plan="free">Free</button><button data-plan="max">MAX</button></div><button class="btn light" data-act="createkey">Create</button></div></div>` : ''}
+    <div class="sub-h">Keys</div>
+    <div class="card">${!S.setup.ready ? '<div class="empty">Available when setup finishes.</div>' : !ks ? '<div class="empty">Loading…</div>' : ks.error ? `<div class="empty err">${esc(ks.error)}</div>` : !ks.filter((k) => k.name !== 'Launch app').length ? '<div class="empty">No keys yet.</div>' : `
+      <table><tr><th>Key</th><th>Who</th><th>Plan</th><th>Today</th><th></th></tr>${ks.filter((k) => k.name !== 'Launch app').slice().reverse().map((k) => `<tr><td class="mono" style="font-size:14px">${esc(k.prefix)}…${k.state !== 'active' ? ` <span class="pill bad">${esc(k.state)}</span>` : ''}</td>
+        <td>${esc(k.email || k.name || (k.install ? 'KSTRL (automatic)' : 'Manual key'))}</td><td><span class="pill ${k.plan === 'max' ? 'max' : ''}">${k.plan === 'max' ? 'MAX' : 'Free'}</span></td><td>${k.used} credits</td>
+        <td style="text-align:right;white-space:nowrap">${k.state === 'active' ? `<button class="btn sm" data-act="kplan" data-ref="${esc(k.prefix)}" data-val="${k.plan === 'max' ? 'free' : 'max'}">Make ${k.plan === 'max' ? 'Free' : 'MAX'}</button> <button class="btn ghost sm" data-act="krevoke" data-ref="${esc(k.prefix)}">Revoke</button>` : ''}</td></tr>`).join('')}</table>`}</div>
+    <div class="sub-h">Accounts</div>
+    <div class="card">${!us ? '<div class="empty">Loading…</div>' : us.error ? `<div class="empty err">${esc(us.error)}</div>` : !us.length ? '<div class="empty">No accounts yet. They appear when someone signs up in KSTRL with this server.</div>' : `
+      <table><tr><th>Email</th><th>Name</th><th>Plan</th><th>Today</th><th></th></tr>${us.map((u) => `<tr><td>${esc(u.email)}${u.banned ? ' <span class="pill bad">blocked</span>' : ''}</td><td>${esc(u.name)}</td><td><span class="pill ${u.plan === 'max' ? 'max' : ''}">${u.plan === 'max' ? 'MAX' : 'Free'}</span></td><td>${u.used} credits</td>
+        <td style="text-align:right;white-space:nowrap">${u.banned ? '' : `<button class="btn sm" data-act="uplan" data-email="${esc(u.email)}" data-val="${u.plan === 'max' ? 'free' : 'max'}">Make ${u.plan === 'max' ? 'Free' : 'MAX'}</button> <button class="btn ghost sm" data-act="uban" data-email="${esc(u.email)}">Block</button>`}</td></tr>`).join('')}</table>`}</div></div>`;
 }
 function pageSettings() {
   const st = S.setup, u = S.update;
   return `<div class="inner">
-  <div class="title">Settings</div><div class="subtitle">Runtime, updates and files.</div>
-  <div class="sec"><div class="sec-t">Updates</div><div class="card">
-    <div class="row"><div class="txt"><div class="t">Launch ${esc(S.version)}</div><div class="d">${u.available ? `<span class="ok">Launch ${esc(u.available.version)} is available.</span>` : u.error ? `<span class="err">${esc(u.error)}</span>` : u.checked ? 'You’re on the latest version.' : 'Checking…'}</div></div>
-      ${u.available ? `<button class="btn grad" data-act="upd-open">${icon('up')} Update</button>` : `<button class="btn" data-act="upd-check">${icon('refresh')} Check for updates</button>`}</div>
-  </div></div>
-  <div class="sec"><div class="sec-t">Runtime</div><div class="card">
-    <div class="row"><div class="txt"><div class="t">${st.ready ? 'Ready' : st.error ? '<span class="err">Setup failed</span>' : 'Setting up…'}</div><div class="d">${st.ready ? `${esc(st.hw)} · PyTorch ${esc(st.torch)}` : esc(st.error || st.progress || 'Downloading Python and PyTorch for this PC')}</div></div>
-      <button class="btn" data-act="reinstall" ${st.ready || st.error ? '' : 'disabled'}>Reinstall runtime</button></div>
-    <div class="row"><div class="txt"><div class="t">Files</div><div class="d mono" style="font-size:12px">${esc(S.paths.base)}<br>${esc(S.paths.models)}</div></div>
-      <div class="acts"><button class="btn" data-act="open" data-what="base">${icon('folder')} Launch folder</button><button class="btn" data-act="open" data-what="models">${icon('folder')} Models</button></div></div>
-  </div></div>
-  <div class="sec"><div class="sec-t">Setup log</div><div class="card"><pre class="log">${esc(st.log.map((l) => l.replace(/^\r/, '')).join('\n')) || '—'}</pre></div></div></div>`;
+    <div class="head"><div><h1>Settings</h1><p>Updates, runtime and files.</p></div></div>
+    <div class="card">
+      <div class="row"><div class="txt"><div class="t">Launch ${esc(S.version)}</div><div class="d">${u.available ? `<span class="ok">Launch ${esc(u.available.version)} is available.</span>` : u.error ? `<span class="err">${esc(u.error)}</span>` : u.checked ? 'You’re on the latest version.' : 'Checking…'}</div></div>
+        ${u.available ? `<button class="btn grad" data-act="upd-open">${icon('up', 'sm')} Update</button>` : `<button class="btn" data-act="upd-check">${icon('refresh', 'sm')} Check for updates</button>`}</div>
+      <div class="row"><div class="txt"><div class="t">Runtime</div><div class="d">${st.ready ? `${esc(st.hw)} · PyTorch ${esc(st.torch)}` : esc(st.error || st.progress || 'Setting up…')}</div></div><button class="btn" data-act="reinstall" ${st.ready || st.error ? '' : 'disabled'}>Reinstall runtime</button></div>
+      <div class="row"><div class="txt"><div class="t">Files</div><div class="d mono" style="font-size:12.5px">${esc(S.paths.base)}<br>${esc(S.paths.models)}</div></div><button class="btn" data-act="open" data-what="base">Launch folder</button><button class="btn" data-act="open" data-what="models">Models folder</button></div>
+    </div>
+    <div class="sub-h">Setup log</div><div class="card"><pre class="log">${esc(st.log.map((l) => l.replace(/^\r/, '')).join('\n')) || '—'}</pre></div></div>`;
 }
+
+// ---------- popovers ----------
+let pop = null;
+function openPop(anchor, items) {
+  const r = anchor.getBoundingClientRect();
+  pop = items;
+  const html = `<div class="pop" style="left:${Math.min(r.left, innerWidth - 260)}px;top:${r.bottom + 6}px">${items.map((it, i) => it === '-' ? '<div class="sep"></div>' : it.label ? `<div class="lbl">${esc(it.label)}</div>` : `<button data-pop="${i}" class="${it.sel ? 'sel' : ''}">${esc(it.t)}${it.k ? `<span class="k">${esc(it.k)}</span>` : ''}</button>`).join('')}</div>`;
+  $('#popwrap').innerHTML = html;
+  document.querySelectorAll('[data-menu]').forEach((b) => b.classList.toggle('open', b === anchor));
+}
+function closePop() { pop = null; $('#popwrap').innerHTML = ''; document.querySelectorAll('[data-menu]').forEach((b) => b.classList.remove('open')); }
+const apiUrl = () => S.server.url || `http://127.0.0.1:${S.cfg.port || 8000}/v1`;
+const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied ' + (t.length > 60 ? 'to the clipboard' : t)); } catch { toast('Couldn’t copy', true); } };
+const MENUS = {
+  file: () => [{ t: 'New Chat', k: 'Ctrl+N', run: () => { chat = []; go('chat'); } }, { t: 'Download models…', run: () => go('discover') }, { t: 'Add model from folder…', run: addFolder }, '-', { t: 'Open models folder', run: () => act(() => api('open', { what: 'models' })) }, { t: 'Open Launch folder', run: () => act(() => api('open', { what: 'base' })) }, '-', { t: 'Close window', k: 'Ctrl+W', run: () => window.close() }],
+  edit: () => [{ t: 'Copy API URL', run: () => copy(apiUrl()) }, { t: 'Create API key', run: () => { keyForm = true; go('keys'); } }, '-', { t: 'Settings', k: 'Ctrl+,', run: () => go('settings') }],
+  view: () => [{ t: sideHidden ? 'Show sidebar' : 'Hide sidebar', k: 'Ctrl+B', run: () => { sideHidden = !sideHidden; render(); } }, '-', ...NAV.map(([id, l]) => ({ t: l, run: () => go(id) })), { t: 'Settings', run: () => go('settings') }, '-', { t: 'Reload', k: 'Ctrl+R', run: () => location.reload() }],
+  help: () => [{ t: 'Check for updates', run: checkUpdate }, { t: 'Launch on GitHub', run: () => act(() => api('open', { what: 'https://github.com/KSTRLAI/KSTRL/releases' })) }, '-', { t: `About Launch ${S.version}`, run: () => toast(`Launch ${S.version} · Launch engine · ${S.setup.hw || ''}`) }],
+  more: () => [{ t: 'Copy API URL', run: () => copy(apiUrl()) }, { t: S.server.running ? 'Restart server' : 'Start server', run: () => act(() => api(S.server.running ? 'server/restart' : 'server/start', {})) }, ...(S.server.engine?.loaded ? [{ t: 'Unload model', run: () => act(() => api('model/unload', {})) }] : []), '-', { t: 'Check for updates', run: checkUpdate }, { t: 'Settings', run: () => go('settings') }],
+};
+function mapMenu(anchor, slot) {
+  const ms = Array.isArray(lists.models) ? lists.models : [], cur = mapData?.map?.[slot];
+  openPop(anchor, [{ label: `${mapData.slots.find((s) => s.id === slot)?.name} runs…` }, { t: 'Whatever model is loaded', sel: !cur, run: () => setMap(slot, '') }, ...ms.map((m) => ({ t: m.id, sel: cur === m.id, run: () => setMap(slot, m.id) })), ...(ms.length ? [] : [{ t: 'Download a model first…', run: () => go('discover') }])]);
+}
+async function setMap(slot, model) { await act(() => api('map', { key: slot, model })); await loadMap(); load('models'); }
+async function addFolder() { const r = await act(() => api('addfolder', {})); if (r?.id) { toast(`Added ${r.id}`); load('models'); } }
+async function checkUpdate() { await act(() => api('update/check', {})); await poll(); if (S.update.available) { updDismissed = null; render(); } else if (!S.update.error) toast('You’re on the latest version'); else toast(S.update.error, true); }
+async function search(q) { disc.q = q; disc.busy = true; disc.err = null; disc.res = q ? null : disc.res; render(); if (q) { try { disc.res = await api('discover?q=' + encodeURIComponent(q)); } catch (e) { disc.err = e.message; } } disc.busy = false; render(); }
 
 // ---------- overlays ----------
 function renderOverlay() {
   const st = S.setup, u = S.update;
   let html = '';
   if (!st.ready) {
-    html = `<div class="overlay"><div class="modal setup"><div class="head"><img src="/icon.png" alt=""><div><h3 style="margin:0">${st.error ? 'Setup didn’t finish' : 'Setting up Launch'}</h3><p>${st.error ? esc(st.error) : 'First run only: downloading Python and PyTorch for this PC. This can take a few minutes.'}</p></div></div>
-      ${st.error ? '' : `<div class="bar"><div style="width:${(st.progress.match(/(\d+)%/) || [0, 8])[1]}%"></div></div><p class="mono" style="font-size:12px">${esc(st.progress || 'Starting…')}</p>${st.idle > 20 ? `<p style="font-size:12px">Still working — big downloads and installs can go quiet for a few minutes (last update ${st.idle < 120 ? st.idle + 's' : Math.round(st.idle / 60) + ' min'} ago). Keep this window open.</p>` : ''}`}
+    html = `<div class="overlay"><div class="modal setup"><div class="head2"><img src="/icon.png" alt=""><div><h3 style="margin:0">${st.error ? 'Setup didn’t finish' : 'Setting up Launch'}</h3><p>${st.error ? esc(st.error) : 'First run only: downloading Python and PyTorch for this PC. This can take a few minutes.'}</p></div></div>
+      ${st.error ? '' : `<div class="bar"><div style="width:${(st.progress.match(/(\d+)%/) || [0, 8])[1]}%"></div></div><p class="mono" style="font-size:12.5px">${esc(st.progress || 'Starting…')}</p>${st.idle > 20 ? `<p style="font-size:12.5px">Still working — big downloads and installs can go quiet for a few minutes (last update ${st.idle < 120 ? st.idle + 's' : Math.round(st.idle / 60) + ' min'} ago). Keep this window open.</p>` : ''}`}
       <pre class="log">${esc(st.log.slice(-40).map((l) => l.replace(/^\r/, '')).join('\n'))}</pre>
       ${st.error ? '<div class="mrow"><button class="btn grad" data-act="reinstall">Try again</button></div>' : ''}
-      ${u.available ? `<div class="row" style="padding:10px 0 0;border-top:1px solid var(--border)"><div class="txt"><div class="t" style="font-size:13.5px">Launch ${esc(u.available.version)} is available</div><div class="d">${u.busy ? esc(u.status) : u.error && updTried ? `<span class="err">${esc(u.error)}</span>` : 'You can update now — setup continues in the new version.'}</div></div>${u.busy ? '' : '<button class="btn grad" data-act="upd-apply">Update</button>'}</div>` : ''}</div></div>`;
+      ${u.available ? `<div class="row" style="padding:12px 0 0;border-top:1px solid var(--line)"><div class="txt"><div class="t">Launch ${esc(u.available.version)} is available</div><div class="d">${u.busy ? esc(u.status) : u.error && updTried ? `<span class="err">${esc(u.error)}</span>` : 'You can update now — setup continues in the new version.'}</div></div>${u.busy ? '' : '<button class="btn grad" data-act="upd-apply">Update</button>'}</div>` : ''}</div></div>`;
   } else if (u.available && (updDismissed !== u.available.version || u.busy || (updTried && u.error))) {
-    html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt="">
-      <h3>${u.error && updTried ? 'The update didn’t work' : 'Update available'}</h3>
+    html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt=""><h3>${u.error && updTried ? 'The update didn’t work' : 'Update available'}</h3>
       <p>${u.busy ? esc(u.status) : u.error && updTried ? esc(u.error) : `Launch ${esc(u.available.version)} is out — you have ${esc(S.version)}. ${u.self === false ? 'Open the download page to get it.' : 'Update now and Launch restarts in the new version.'}`}</p>
       ${u.busy ? `<div class="bar"><div style="width:${(u.status.match(/(\d+)%/) || [0, 3])[1]}%"></div></div>` : ''}
       <div class="mrow">${u.busy ? '' : `<button class="btn ghost" data-act="upd-later">Later</button><button class="btn grad" data-act="upd-apply">${u.self === false ? 'Download' : 'Update now'}</button>`}</div></div></div>`;
@@ -347,40 +474,39 @@ function renderOverlay() {
 }
 
 // ---------- render ----------
-let lastMain = '';
-let rendering = false;
-function render() {
-  if (!S || rendering) return;
-  rendering = true;
-  try { renderNow(); } finally { rendering = false; }
-}
+let lastMain = '', lastSide = '', rendering = false;
+function render() { if (!S || rendering) return; rendering = true; try { renderNow(); } finally { rendering = false; } }
 function renderNow() {
-  renderNav();
-  const html = { models: pageModels, server: pageServer, chat: pageChat, keys: pageKeys, users: pageUsers, settings: pageSettings }[page]();
+  renderChrome();
+  const prevSide = $('#side').innerHTML; renderSide(); if ($('#side').innerHTML === prevSide) {} // cheap enough
+  const html = { models: pageModels, discover: pageDiscover, server: pageServer, chat: pageChat, keys: pageKeys, settings: pageSettings }[page]();
   if (html !== lastMain) {
-    const main = $('#main'), active = document.activeElement, id = active?.id, pos = active?.selectionStart;
-    const logBottom = $('#svlog') ? $('#svlog').scrollHeight - $('#svlog').scrollTop - $('#svlog').clientHeight < 30 : true;
-    const msgsBottom = $('#msgs') ? $('#msgs').scrollHeight - $('#msgs').scrollTop - $('#msgs').clientHeight < 60 : true;
+    const main = $('#main'), a = document.activeElement, id = a?.id, pos = a?.selectionStart, keep = {};
+    for (const k of ['q', 'repo', 'hftoken', 'kname', 'sv-port']) if ($('#' + k)) keep[k] = $('#' + k).value;
+    const logB = $('#svlog') ? $('#svlog').scrollHeight - $('#svlog').scrollTop - $('#svlog').clientHeight < 30 : true;
+    const msgB = $('#msgs') ? $('#msgs').scrollHeight - $('#msgs').scrollTop - $('#msgs').clientHeight < 60 : true;
     main.innerHTML = html; lastMain = html;
+    for (const [k, v] of Object.entries(keep)) if ($('#' + k) && k !== 'sv-port') $('#' + k).value = v;
     if (id && $('#' + id)) { const el = $('#' + id); el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch {} }
-    if ($('#svlog') && logBottom) $('#svlog').scrollTop = 1e9;
-    if ($('#msgs') && msgsBottom) $('#msgs').scrollTop = 1e9;
+    if ($('#svlog') && logB) $('#svlog').scrollTop = 1e9;
+    if ($('#msgs') && msgB) $('#msgs').scrollTop = 1e9;
   }
   renderOverlay();
 }
 
-// ---------- actions ----------
+// ---------- chat ----------
 async function sendChat() {
   const ta = $('#prompt'); const text = ta?.value.trim();
   if (!text || streaming) return;
   ta.value = '';
+  const model = $('#chatmodel')?.value || ''; chatModel = model;
   chat.push({ role: 'user', content: text });
-  const reply = { role: 'assistant', content: '' }; chat.push(reply);
+  const reply = { role: 'assistant', content: '', model }; chat.push(reply);
   const ctrl = new AbortController(); streaming = ctrl; render();
   const t0 = performance.now(); let n = 0;
   try {
     const r = await fetch('/api/chat', { method: 'POST', signal: ctrl.signal, headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' },
-      body: JSON.stringify({ messages: chat.filter((m) => m !== reply && !m.error).map((m) => ({ role: m.role, content: m.content })) }) });
+      body: JSON.stringify({ model, messages: chat.filter((m) => m !== reply && !m.error).map((m) => ({ role: m.role, content: m.content })) }) });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
     const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -398,62 +524,81 @@ async function sendChat() {
   } catch (e) { if (e.name !== 'AbortError') reply.error = e.message; }
   if (n) reply.stats = `${n} tokens · ${(n / ((performance.now() - t0) / 1000)).toFixed(1)} tok/s`;
   if (!reply.content && !reply.error) reply.content = '(stopped)';
-  streaming = null; render();
+  streaming = null; render(); load('models');
 }
 
+// ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const g = e.target.closest('[data-go]'); if (g) return go(g.dataset.go);
-  const tog = e.target.closest('[data-tog]');
-  if (tog && !tog.disabled) { tog.classList.toggle('on'); draft[tog.dataset.tog] = tog.classList.contains('on'); render(); return; }
+  const pb = e.target.closest('[data-pop]'); if (pb) { const it = pop[+pb.dataset.pop]; closePop(); it?.run?.(); return; }
+  const mb = e.target.closest('[data-menu]'); if (mb) { if (mb.classList.contains('open')) return closePop(); return openPop(mb, MENUS[mb.dataset.menu]()); }
+  const mp = e.target.closest('[data-map]'); if (mp) { return mapMenu(mp, mp.dataset.map); }
+  if (pop && !e.target.closest('.pop')) closePop();
+  const tog = e.target.closest('[data-tog]'); if (tog) { tog.classList.toggle('on'); draft[tog.dataset.tog] = tog.classList.contains('on'); render(); return; }
   const seg = e.target.closest('#kplan button'); if (seg) { seg.parentNode.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === seg)); return; }
-  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const b = e.target.closest('[data-act]');
+  const g = e.target.closest('[data-go]');
+  if (b?.dataset.act === 'newchat') { chat = []; }
+  if (g && (!b || b === g)) return go(g.dataset.go);
+  if (!b || b.disabled) return;
   const a = b.dataset.act;
-  if (a === 'pull') { const repo = $('#repo').value.trim(); await act(() => api('pull', { repo, token: $('#hftoken').value.trim() })); poll(); }
+  if (a === 'toggle-side') { sideHidden = !sideHidden; render(); }
+  else if (a === 'back' && hpos > 0) go(hist[--hpos], false);
+  else if (a === 'fwd' && hpos < hist.length - 1) go(hist[++hpos], false);
+  else if (a === 'api') copy(apiUrl());
+  else if (a === 'gs') gsSteps().find((s) => !s.done)?.run();
+  else if (a === 'search') search($('#q').value.trim());
+  else if (a === 'pull' || a === 'pull-typed') { const repo = a === 'pull' ? b.dataset.id : $('#repo').value.trim(); await act(() => api('pull', { repo, token: $('#hftoken')?.value.trim() || '' })); poll(); }
   else if (a === 'reload-models') load('models');
-  else if (a === 'reload-keys') load('keys');
-  else if (a === 'reload-users') load('users');
-  else if (a === 'use') { draft.model = b.dataset.id; go('server'); }
-  else if (a === 'rm') { if (confirm(`Delete ${b.dataset.id} from this PC?`)) { await act(() => api('models/delete', { id: b.dataset.id }), 'Model deleted'); load('models'); } }
-  else if (a === 'start') {
-    await act(() => api('server/start', { model: $('#sv-model').value, port: $('#sv-port').value, ctx: $('#sv-ctx').value, public: $('[data-tog=public]').classList.contains('on'), auth: $('[data-tog=auth]').classList.contains('on') }));
-    poll();
-  }
+  else if (a === 'addfolder') addFolder();
+  else if (a === 'loadm') { await act(() => api('model/load', { id: b.dataset.id }), 'Model loaded'); load('models'); }
+  else if (a === 'unload') { await act(() => api('model/unload', {})); load('models'); }
+  else if (a === 'rm') { if (confirm(`Delete ${b.dataset.id} from this PC?`)) { await act(() => api('models/delete', { id: b.dataset.id }), 'Model deleted'); load('models'); loadMap(); } }
+  else if (a === 'start') { await act(() => api('server/start', { ...S.cfg, ...draft })); poll(); }
+  else if (a === 'restart') { const port = $('#sv-port')?.value || S.cfg.port; const ctx = $('#sv-ctx')?.value || S.cfg.ctx; await act(() => api('server/restart', { ...S.cfg, ...draft, port, ctx })); for (const k in draft) delete draft[k]; poll(); }
   else if (a === 'stop') { await act(() => api('server/stop', {})); poll(); }
-  else if (a === 'copy') { try { await navigator.clipboard.writeText(b.dataset.text); toast('Copied'); } catch { toast('Couldn’t copy', true); } }
+  else if (a === 'copy') copy(b.dataset.text);
   else if (a === 'send') sendChat();
   else if (a === 'stopchat') streaming?.abort();
   else if (a === 'clear') { chat = []; render(); }
   else if (a === 'keyform') { keyForm = !keyForm; render(); setTimeout(() => $('#kname')?.focus(), 20); }
-  else if (a === 'createkey') {
-    const r = await act(() => api('keys/create', { name: $('#kname').value, plan: $('#kplan .on').dataset.plan }));
-    if (r?.key) { newKey = r.key; keyForm = false; load('keys'); }
-  }
+  else if (a === 'createkey') { const r = await act(() => api('keys/create', { name: $('#kname').value, plan: $('#kplan .on').dataset.plan })); if (r?.key) { newKey = r.key; keyForm = false; load('keys'); } }
   else if (a === 'hidekey') { newKey = null; render(); }
   else if (a === 'kplan') { await act(() => api('keys/action', { action: 'plan', ref: b.dataset.ref, value: b.dataset.val })); load('keys'); }
   else if (a === 'krevoke') { if (confirm('Revoke this key? Apps using it stop working.')) { await act(() => api('keys/action', { action: 'revoke', ref: b.dataset.ref })); load('keys'); } }
   else if (a === 'uplan') { await act(() => api('users/action', { action: 'plan', email: b.dataset.email, value: b.dataset.val })); load('users'); }
-  else if (a === 'uban') { if (confirm(`Block ${b.dataset.email}? They won't be able to log in or chat.`)) { await act(() => api('users/action', { action: 'ban', email: b.dataset.email })); load('users'); } }
-  else if (a === 'upd-check') { await act(() => api('update/check', {})); await poll(); if (!S.update.available && !S.update.error) toast('You’re on the latest version'); }
+  else if (a === 'uban') { if (confirm(`Block ${b.dataset.email}?`)) { await act(() => api('users/action', { action: 'ban', email: b.dataset.email })); load('users'); } }
+  else if (a === 'upd-check') checkUpdate();
   else if (a === 'upd-open') { updDismissed = null; render(); }
   else if (a === 'upd-later') { updDismissed = S.update.available?.version; updTried = false; render(); }
-  else if (a === 'upd-apply') { updTried = true; if (S.server.running && !confirm('The server is running. Stop it and update?')) return; await act(() => api('update/apply', {})); if (S.update.self === false) updDismissed = S.update.available?.version; poll(); }
+  else if (a === 'upd-apply') { updTried = true; await act(() => api('update/apply', {})); if (S.update.self === false) updDismissed = S.update.available?.version; poll(); }
   else if (a === 'reinstall') { if (S.setup.error || confirm('Download and reinstall Python and PyTorch?')) { await act(() => api('reinstall', {})); poll(); } }
   else if (a === 'open') act(() => api('open', { what: b.dataset.what }));
 });
-document.addEventListener('change', (e) => { const m = { 'sv-model': 'model', 'sv-port': 'port', 'sv-ctx': 'ctx' }[e.target.id]; if (m) { draft[m] = e.target.value; setTimeout(render); } });
-document.addEventListener('input', (e) => { if (e.target.id === 'sv-port') draft.port = e.target.value; });
-document.addEventListener('keydown', (e) => { if (e.target.id === 'prompt' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } if (e.target.id === 'repo' && e.key === 'Enter') $('[data-act=pull]')?.click(); if (e.target.id === 'kname' && e.key === 'Enter') $('[data-act=createkey]')?.click(); });
+document.addEventListener('change', (e) => { if (e.target.id === 'sv-ctx') { draft.ctx = e.target.value; setTimeout(render); } if (e.target.id === 'chatmodel') chatModel = e.target.value; });
+document.addEventListener('input', (e) => { if (e.target.id === 'sv-port') { draft.port = e.target.value; } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePop();
+  if (e.target.id === 'prompt' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+  if (e.target.id === 'q' && e.key === 'Enter') search(e.target.value.trim());
+  if (e.target.id === 'repo' && e.key === 'Enter') $('[data-act=pull-typed]')?.click();
+  if (e.target.id === 'kname' && e.key === 'Enter') $('[data-act=createkey]')?.click();
+  if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); chat = []; go('chat'); }
+  if (e.ctrlKey && e.key === ',') { e.preventDefault(); go('settings'); }
+  if (e.ctrlKey && e.key.toLowerCase() === 'b') { e.preventDefault(); sideHidden = !sideHidden; render(); }
+});
 
 // ---------- polling ----------
-let wasReady = false, wasDownloading = false, fails = 0;
+let wasReady = false, wasDl = false, fails = 0, ticks = 0;
 async function poll() {
   try { S = await api('state'); fails = 0; } catch {
-    if (++fails >= 3 && S) { const ov = $('#overlay'); const html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt=""><h3>Launch stopped</h3><p>${GONE}</p></div></div>`; if (ov.dataset.html !== html) { ov.innerHTML = html; ov.dataset.html = html; } }
+    if (++fails >= 3 && S) { const ov = $('#overlay'); const html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt=""><h3>Launch stopped</h3><p>Launch isn’t running any more — close this window and open Launch again.</p></div></div>`; if (ov.dataset.html !== html) { ov.innerHTML = html; ov.dataset.html = html; } }
     return;
   }
-  if (S.setup.ready && !wasReady) { wasReady = true; load('models'); }
-  if (wasDownloading && !S.download.busy) load('models');
-  wasDownloading = S.download.busy;
+  if (S.setup.ready && !wasReady) { wasReady = true; load('models'); load('keys'); loadMap(); }
+  if (wasDl && !S.download.busy) { load('models'); }
+  wasDl = S.download.busy;
+  if (++ticks % 5 === 0 && wasReady && (page === 'models' || page === 'server')) load('models');
+  if (ticks % 10 === 0 && wasReady) load('keys');
   render();
 }
 poll(); setInterval(poll, 1000);

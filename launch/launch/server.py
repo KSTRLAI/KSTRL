@@ -12,7 +12,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from .chat import ChatFormat, ToolStream
-from .engine import Engine, SampleParams
+from .engine import SampleParams
+from .manager import COLOSSUS, Manager, read_map
 from .store import HOME, Store, credits, next_reset_ms
 
 UUID_RE = __import__("re").compile(r"^[0-9a-fA-F-]{32,36}$")
@@ -22,10 +23,8 @@ def err(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse({"error": {"code": code, "message": message}}, status_code=status)
 
 
-def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | None = None) -> FastAPI:
+def create_app(manager: Manager, store: Store, auth: bool = True, admin_token: str | None = None) -> FastAPI:
     app = FastAPI(title="Launch", docs_url=None, redoc_url=None)
-    fmt = ChatFormat(engine.tok_config)
-    model_name = model_id or engine.name
     crash_log = HOME / "crash.log"
 
     def client_ip(req: Request) -> str:
@@ -43,14 +42,48 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
 
     @app.get("/health")
     def health():
-        return {"ok": True, "model": model_name}
+        return {"ok": True, "model": manager.model_id}
 
     @app.get("/v1/models")
     def models(req: Request):
         _, e = require_key(req)
         if e:
             return e
-        return {"object": "list", "data": [{"id": model_name, "object": "model", "owned_by": "launch", "created": int(time.time())}]}
+        now = int(time.time())
+        ids = manager.installed()
+        mapped = [k for k in COLOSSUS if read_map().get(k) in ids]
+        return {"object": "list", "data": [{"id": i, "object": "model", "owned_by": "launch", "created": now} for i in ids + mapped]}
+
+    # ---- the Launch window controls loading (localhost + a per-run admin token only) ----
+    def admin_ok(req: Request) -> bool:
+        return bool(admin_token) and client_ip(req) in ("127.0.0.1", "::1") and req.headers.get("x-launch-admin") == admin_token
+
+    @app.get("/launch/status")
+    def lstatus(req: Request):
+        if not admin_ok(req):
+            return err(403, "forbidden", "forbidden")
+        return manager.status()
+
+    @app.post("/launch/load")
+    async def lload(req: Request):
+        if not admin_ok(req):
+            return err(403, "forbidden", "forbidden")
+        body = await req.json()
+        mid = str(body.get("model", ""))
+        if mid not in manager.installed():
+            return err(404, "not_found", f"{mid} isn't downloaded")
+        try:
+            await asyncio.to_thread(manager.get, mid)
+        except Exception as ex:  # noqa: BLE001
+            return err(500, "load_failed", str(ex))
+        return manager.status()
+
+    @app.post("/launch/unload")
+    async def lunload(req: Request):
+        if not admin_ok(req):
+            return err(403, "forbidden", "forbidden")
+        await asyncio.to_thread(manager.unload)
+        return manager.status()
 
     # ---- KSTRL: automatic keys ----
     @app.post("/v1/kstrl/register")
@@ -180,6 +213,14 @@ def create_app(engine: Engine, store: Store, auth: bool = True, model_id: str | 
             body = await req.json()
         except Exception:
             return err(400, "bad_request", "Send JSON")
+        mid = manager.resolve(body.get("model"), req.headers.get("x-kstrl-model"))
+        if not mid:
+            return err(503, "no_model", "No model is downloaded on this Launch server yet. Open Launch and download one.")
+        try:
+            engine = await asyncio.to_thread(manager.get, mid)
+        except Exception as ex:  # noqa: BLE001
+            return err(500, "load_failed", f"Couldn't load {mid}: {ex}")
+        fmt, model_name = manager.fmt, mid
         messages = body.get("messages") or []
         tools = body.get("tools") or None
         if tools and body.get("tool_choice") == "none":
