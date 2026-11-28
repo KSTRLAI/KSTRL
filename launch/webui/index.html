@@ -192,8 +192,10 @@ let S = null, page = 'models', lists = { models: null, keys: null, users: null }
 let chat = [], streaming = null, updDismissed = null, updTried = false;
 const draft = {}; // server settings being edited (kept across re-renders)
 
+const GONE = 'Launch isn’t running any more — close this window and open Launch again.';
 async function api(path, body) {
-  const r = await fetch('/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  let r;
+  try { r = await fetch('/api/' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Launch-Token': TOKEN, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }); } catch { throw new Error(GONE); }
   const j = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (!r.ok) throw new Error(j?.error || `Error ${r.status}`);
   return j;
@@ -442,9 +444,12 @@ document.addEventListener('input', (e) => { if (e.target.id === 'sv-port') draft
 document.addEventListener('keydown', (e) => { if (e.target.id === 'prompt' && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } if (e.target.id === 'repo' && e.key === 'Enter') $('[data-act=pull]')?.click(); if (e.target.id === 'kname' && e.key === 'Enter') $('[data-act=createkey]')?.click(); });
 
 // ---------- polling ----------
-let wasReady = false, wasDownloading = false;
+let wasReady = false, wasDownloading = false, fails = 0;
 async function poll() {
-  try { S = await api('state'); } catch { return; }
+  try { S = await api('state'); fails = 0; } catch {
+    if (++fails >= 3 && S) { const ov = $('#overlay'); const html = `<div class="overlay"><div class="modal"><img src="/icon.png" alt=""><h3>Launch stopped</h3><p>${GONE}</p></div></div>`; if (ov.dataset.html !== html) { ov.innerHTML = html; ov.dataset.html = html; } }
+    return;
+  }
   if (S.setup.ready && !wasReady) { wasReady = true; load('models'); }
   if (wasDownloading && !S.download.busy) load('models');
   wasDownloading = S.download.busy;

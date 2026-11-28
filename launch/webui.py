@@ -269,6 +269,14 @@ def state():
     return s
 
 
+def ui_log(msg: str):
+    try:
+        with open(B.BASE / "ui.log", "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
+
+
 def shutdown():
     stop_server()
     try:
@@ -482,22 +490,28 @@ def main(bootstrap_module):
     bg(do_setup)
     bg(check_update)
     url = f"http://127.0.0.1:{PORT}/?t={TOKEN}"
+    ui_log(f"Launch {B.VERSION} started on port {PORT}")
     open_window(url)
     started = time.time()
-    # Stay alive while the window is open: our Edge process is running, or the page keeps polling.
+    # Stay alive while the window is open. The page polls /api/state every second, so its heartbeat is the
+    # source of truth: Edge often restarts or hands the window to another process, so its exit means nothing alone.
+    reason = ""
     while True:
         time.sleep(1)
         now = time.time()
-        if BYE_AT and now - BYE_AT > 4:  # the page closed (and didn't come back — a reload would)
+        quiet = now - (LAST_BEAT or started)
+        if BYE_AT and now - BYE_AT > 4 and LAST_BEAT < BYE_AT:  # the page closed and didn't come back (a reload would)
+            reason = "window closed"
             break
-        if BROWSER is not None:
-            if BROWSER.poll() is None:
-                continue
-            if now - started > 8 and not getattr(main, "handoff", False):  # our window ran and was closed
-                break
-            main.handoff = True  # Edge handed the window to an already-running instance: rely on the page instead
-        if LAST_BEAT and now - LAST_BEAT > 150:  # minimised windows poll slowly, so be generous
+        edge_gone = BROWSER is not None and BROWSER.poll() is not None
+        if edge_gone and LAST_BEAT and quiet > 20:  # Edge exited and the page stopped polling
+            reason = "window closed (no heartbeat)"
             break
-        if not LAST_BEAT and now - started > 300:
+        if LAST_BEAT and quiet > 600:  # minimised windows poll slowly; give up only after 10 minutes of silence
+            reason = "no heartbeat for 10 minutes"
             break
+        if not LAST_BEAT and quiet > 300:
+            reason = "the window never connected"
+            break
+    ui_log(f"closing: {reason}")
     shutdown()
