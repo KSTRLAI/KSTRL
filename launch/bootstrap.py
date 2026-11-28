@@ -15,13 +15,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 PY_VERSION = "3.12.10"
 PY_EMBED = f"https://www.python.org/ftp/python/{PY_VERSION}/python-{PY_VERSION}-embed-amd64.zip"
 GET_PIP = "https://bootstrap.pypa.io/get-pip.py"
-TORCH_INDEXES_GPU = ["https://download.pytorch.org/whl/cu128", "https://download.pytorch.org/whl/cu126"]
 TORCH_INDEX_CPU = "https://download.pytorch.org/whl/cpu"
-DEPS = ["safetensors>=0.4", "tokenizers>=0.15", "jinja2>=3.1", "fastapi>=0.110", "uvicorn>=0.29", "huggingface_hub>=0.23"]
+DEPS = ["safetensors>=0.4", "tokenizers>=0.15", "jinja2>=3.1", "fastapi>=0.110", "uvicorn>=0.29", "numpy"]
 
 WIN = os.name == "nt"
 BASE = Path(os.environ.get("LOCALAPPDATA", Path.home() / ".local" / "share")) / "Launch"
@@ -151,9 +150,64 @@ def install_app():
     shutil.copytree(bundled_src(), dest, ignore=shutil.ignore_patterns("__pycache__"))
 
 
+# PyTorch builds to try, newest first. Each is checked on the GPU before it's kept: recent CUDA 12.8 builds
+# dropped older cards (GTX 9xx/10xx), so those fall through to a CUDA 12.6 / 11.8 build that still has them.
+TORCH_GPU = [("torch", "cu128"), ("torch", "cu126"), ("torch==2.7.1", "cu126"), ("torch==2.7.1", "cu118")]
+CUDA_CHECK = ("import torch,sys\n"
+              "assert torch.cuda.is_available(), 'CUDA not available'\n"
+              "x=torch.randn(64,64,device='cuda',dtype=torch.float16)\n"
+              "v=(x@x).float().sum().item(); torch.cuda.synchronize(); print('cuda-ok', torch.__version__)")
+
+
+def cuda_works() -> bool:
+    try:
+        out = subprocess.run([str(python_exe()), "-c", CUDA_CHECK], capture_output=True, text=True, timeout=180,
+                             env=child_env(), creationflags=NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if "cuda-ok" in out.stdout:
+        return True
+    say("    the GPU test failed: " + ((out.stderr or out.stdout).strip().splitlines() or ["?"])[-1][:200])
+    return False
+
+
+def install_torch(gpu: str | None, reinstall: bool = False) -> str:
+    """Install the first PyTorch build that actually runs on this PC. Returns its label (cu128 … or cpu)."""
+    for pkg, tag in (TORCH_GPU if gpu else []):
+        try:
+            say(f"  installing PyTorch {pkg.replace('torch', '').lstrip('=') or 'latest'} for CUDA ({tag}) …")
+            pip(pkg, "--index-url", f"https://download.pytorch.org/whl/{tag}", *(["--force-reinstall", "--no-deps"] if reinstall else []))
+            if reinstall:
+                pip(pkg, "--index-url", f"https://download.pytorch.org/whl/{tag}")  # make sure its dependencies are there too
+        except RuntimeError:
+            say("  that didn't install, trying the next option…")
+            continue
+        say("  testing it on your GPU …")
+        if cuda_works():
+            say("  GPU works.")
+            return tag
+        say("  this build doesn't run on your GPU, trying an older one…")
+        reinstall = True
+    if gpu:
+        say("  No PyTorch GPU build runs on this card — using the CPU version (slower, but it works).")
+    pip("torch", "--index-url", TORCH_INDEX_CPU, *(["--force-reinstall"] if gpu else []))
+    return "cpu"
+
+
 def setup(force: bool = False):
     state = json.loads(MARKER.read_text()) if MARKER.exists() else {}
     if not force and state.get("ok") and python_exe().exists():
+        # Runtimes from before 0.5 weren't GPU-tested: check once and repair if this card isn't supported.
+        if state.get("gpu") and state.get("torch") != "cpu" and not state.get("cuda_ok"):
+            say("Checking that PyTorch runs on your GPU …")
+            try:
+                if not cuda_works():
+                    say("Your GPU needs a different PyTorch build — downloading it (one time).")
+                    state["torch"] = install_torch(state["gpu"], reinstall=True)
+                state["cuda_ok"] = True
+                MARKER.write_text(json.dumps(state))
+            except Exception as e:  # noqa: BLE001 — keep the current runtime; the engine falls back to the CPU
+                say(f"Couldn't repair the GPU runtime right now ({e}). Launch will use the CPU until it can; it tries again next start.")
         return state
     BASE.mkdir(parents=True, exist_ok=True)
     gpu = has_nvidia()
@@ -163,20 +217,12 @@ def setup(force: bool = False):
         say(f"  NVIDIA GPU found: {gpu}")
     if not os.environ.get("LAUNCH_PYTHON"):
         make_python()
-    torch_ok = False
-    for index in (TORCH_INDEXES_GPU if gpu else []) + [TORCH_INDEX_CPU]:
-        try:
-            say(f"  installing PyTorch ({index.rsplit('/', 1)[-1]}) …")
-            pip("torch", "--index-url", index)
-            torch_ok = True
-            used = index.rsplit("/", 1)[-1]
-            break
-        except RuntimeError:
-            say("  that didn't work, trying the next option…")
-    if not torch_ok:
-        raise RuntimeError("Couldn't install PyTorch. Check your internet connection and run Launch again.")
+    try:
+        used = install_torch(gpu)
+    except RuntimeError:
+        raise RuntimeError("Couldn't install PyTorch. Check your internet connection and run Launch again.") from None
     pip(*DEPS)
-    state = {"ok": True, "version": VERSION, "torch": used, "gpu": gpu}
+    state = {"ok": True, "version": VERSION, "torch": used, "gpu": gpu, "cuda_ok": True}
     MARKER.write_text(json.dumps(state))
     say("\nSetup done.\n")
     return state
