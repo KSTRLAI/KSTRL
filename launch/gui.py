@@ -12,6 +12,76 @@ import urllib.request
 from pathlib import Path
 from tkinter import messagebox, simpledialog, ttk
 
+# KSTRL's dark palette
+BG = "#0b0b0c"        # window
+PANEL = "#141416"     # tabs / cards
+FIELD = "#1c1c1f"     # inputs, lists
+BORDER = "#2a2a2e"
+TEXT = "#ededed"
+MUTED = "#8b8b93"
+ACCENT = "#ef4444"
+ACCENT_HI = "#f87171"
+UI_FONT = ("Segoe UI", 10)
+MONO = ("Consolas", 10)
+
+
+def apply_theme(root: tk.Tk):
+    st = ttk.Style(root)
+    st.theme_use("clam")
+    root.configure(bg=BG)
+    st.configure(".", background=PANEL, foreground=TEXT, fieldbackground=FIELD, bordercolor=BORDER,
+                 lightcolor=PANEL, darkcolor=PANEL, troughcolor=FIELD, focuscolor=ACCENT, font=UI_FONT,
+                 selectbackground="#3a1d1d", selectforeground=TEXT, insertcolor=TEXT)
+    st.configure("TFrame", background=PANEL)
+    st.configure("Top.TFrame", background=BG)
+    st.configure("TLabel", background=PANEL, foreground=TEXT)
+    st.configure("Top.TLabel", background=BG, foreground=TEXT)
+    st.configure("Brand.TLabel", background=BG, foreground=TEXT, font=("Segoe UI", 15, "bold"))
+    st.configure("Sub.TLabel", background=BG, foreground=MUTED)
+    st.configure("Muted.TLabel", background=PANEL, foreground=MUTED)
+    st.configure("TNotebook", background=BG, borderwidth=0, tabmargins=(0, 4, 0, 0))
+    st.configure("TNotebook.Tab", background=BG, foreground=MUTED, padding=(14, 7), borderwidth=0, font=UI_FONT)
+    st.map("TNotebook.Tab", background=[("selected", PANEL), ("active", "#18181b")], foreground=[("selected", TEXT), ("active", TEXT)],
+           lightcolor=[("selected", PANEL)], bordercolor=[("selected", BORDER)])
+    st.configure("TButton", background=FIELD, foreground=TEXT, bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD, padding=(12, 5), relief="flat")
+    st.map("TButton", background=[("disabled", PANEL), ("pressed", "#26262a"), ("active", "#26262a")], foreground=[("disabled", "#55555c")])
+    st.configure("Accent.TButton", background=ACCENT, foreground="#ffffff", bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
+    st.map("Accent.TButton", background=[("disabled", "#5a2626"), ("pressed", "#dc2626"), ("active", ACCENT_HI)])
+    for w in ("TEntry", "TCombobox"):
+        st.configure(w, fieldbackground=FIELD, foreground=TEXT, bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD, insertcolor=TEXT, padding=5, arrowcolor=MUTED)
+        st.map(w, bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)], fieldbackground=[("readonly", FIELD)], foreground=[("readonly", TEXT)],
+               selectbackground=[("readonly", FIELD)], selectforeground=[("readonly", TEXT)])
+    st.configure("TCheckbutton", background=PANEL, foreground=TEXT, indicatorbackground=FIELD, indicatorforeground=TEXT)
+    st.map("TCheckbutton", background=[("active", PANEL)], indicatorbackground=[("selected", ACCENT), ("active", "#26262a")])
+    st.configure("Treeview", background=FIELD, fieldbackground=FIELD, foreground=TEXT, bordercolor=BORDER, rowheight=26)
+    st.map("Treeview", background=[("selected", "#3a1d1d")], foreground=[("selected", "#ffffff")])
+    st.configure("Treeview.Heading", background=PANEL, foreground=MUTED, bordercolor=BORDER, relief="flat", padding=(6, 5))
+    st.map("Treeview.Heading", background=[("active", "#1c1c1f")])
+    st.configure("Vertical.TScrollbar", background=FIELD, troughcolor=PANEL, bordercolor=PANEL, arrowcolor=MUTED, lightcolor=FIELD, darkcolor=FIELD)
+    # dropdown lists of comboboxes
+    root.option_add("*TCombobox*Listbox.background", FIELD)
+    root.option_add("*TCombobox*Listbox.foreground", TEXT)
+    root.option_add("*TCombobox*Listbox.selectBackground", "#3a1d1d")
+    root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+    root.option_add("*TCombobox*Listbox.font", UI_FONT)
+
+
+def dark_title_bar(root: tk.Tk):
+    """Windows 10/11: dark window frame to match."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        on = ctypes.c_int(1)
+        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (new, old builds)
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(on), ctypes.sizeof(on)) == 0:
+                break
+    except Exception:  # noqa: BLE001
+        pass
+
+
 SUGGESTED = [
     "Qwen/Qwen2.5-Coder-1.5B-Instruct",
     "google/gemma-3-1b-it",
@@ -41,15 +111,22 @@ class App:
         r.title(f"Launch {b.VERSION}")
         r.geometry("980x660")
         r.minsize(760, 480)
+        apply_theme(r)
         self.set_icon()
+        dark_title_bar(r)
         r.protocol("WM_DELETE_WINDOW", self.close)
 
-        top = ttk.Frame(r, padding=(10, 8))
+        top = ttk.Frame(r, padding=(14, 12, 14, 6), style="Top.TFrame")
         top.pack(fill="x")
-        ttk.Label(top, text="LAUNCH", font=("Segoe UI", 14, "bold")).pack(side="left")
-        ttk.Label(top, text="  Launch engine").pack(side="left")
+        try:
+            self.logo = tk.PhotoImage(file=str(Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / "assets" / "icon.png")).subsample(32)
+            ttk.Label(top, image=self.logo, style="Top.TLabel").pack(side="left", padx=(0, 8))
+        except tk.TclError:
+            pass
+        ttk.Label(top, text="LAUNCH", style="Brand.TLabel").pack(side="left")
+        ttk.Label(top, text="   Launch engine", style="Sub.TLabel").pack(side="left", pady=(4, 0))
         self.status = tk.StringVar(value="Starting…")
-        ttk.Label(top, textvariable=self.status).pack(side="right")
+        ttk.Label(top, textvariable=self.status, style="Sub.TLabel").pack(side="right")
 
         self.nb = nb = ttk.Notebook(r)
         nb.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -115,7 +192,9 @@ class App:
     @staticmethod
     def text_box(parent, height=10):
         f = ttk.Frame(parent)
-        t = tk.Text(f, height=height, wrap="word", font=("Consolas", 10), state="disabled")
+        t = tk.Text(f, height=height, wrap="word", font=MONO, state="disabled", bg=FIELD, fg=TEXT, insertbackground=TEXT,
+                    relief="flat", highlightthickness=1, highlightbackground=BORDER, highlightcolor=BORDER, padx=10, pady=8,
+                    selectbackground="#3a1d1d")
         sb = ttk.Scrollbar(f, command=t.yview)
         t.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
@@ -244,7 +323,7 @@ class App:
         row.pack(fill="x", pady=6)
         self.repo = tk.StringVar()
         ttk.Combobox(row, textvariable=self.repo, values=SUGGESTED, width=50).pack(side="left")
-        self.dl_btn = ttk.Button(row, text="Download", command=self.download)
+        self.dl_btn = ttk.Button(row, text="Download", command=self.download, style="Accent.TButton")
         self.dl_btn.pack(side="left", padx=6)
         ttk.Label(row, text="HF token (only for gated models):").pack(side="left", padx=(12, 4))
         self.hf_token = tk.StringVar()
@@ -350,12 +429,12 @@ class App:
 
         row = ttk.Frame(f)
         row.pack(fill="x", pady=8)
-        self.srv_btn = ttk.Button(row, text="Start server", command=self.toggle_server)
+        self.srv_btn = ttk.Button(row, text="Start server", command=self.toggle_server, style="Accent.TButton")
         self.srv_btn.pack(side="left")
         self.srv_state = tk.StringVar(value="Stopped")
         ttk.Label(row, textvariable=self.srv_state).pack(side="left", padx=10)
         ttk.Button(row, text="Copy API URL", command=self.copy_url).pack(side="right")
-        ttk.Label(f, text="In KSTRL: Settings → Model Server → paste the API URL (it ends in /v1). KSTRL creates its own key.", foreground="#666").pack(anchor="w")
+        ttk.Label(f, text="In KSTRL: Settings → Model Server → paste the API URL (it ends in /v1). KSTRL creates its own key.", style="Muted.TLabel").pack(anchor="w")
         box, self.server_log = self.text_box(f, 16)
         box.pack(fill="both", expand=True, pady=(6, 0))
         return f
@@ -415,24 +494,26 @@ class App:
     # ---------- chat ----------
     def build_chat(self, nb):
         f = ttk.Frame(nb, padding=10)
-        ttk.Label(f, text="Chat with the model the server is running (start it in the Server tab).", foreground="#666").pack(anchor="w")
+        ttk.Label(f, text="Chat with the model the server is running (start it in the Server tab).", style="Muted.TLabel").pack(anchor="w")
         box, self.chat_box = self.text_box(f, 18)
         box.pack(fill="both", expand=True, pady=6)
-        self.chat_box.tag_configure("you", foreground="#2563eb", font=("Segoe UI", 10, "bold"))
-        self.chat_box.tag_configure("ai", foreground="#b91c1c", font=("Segoe UI", 10, "bold"))
+        self.chat_box.tag_configure("you", foreground="#93c5fd", font=("Segoe UI", 10, "bold"))
+        self.chat_box.tag_configure("ai", foreground=ACCENT_HI, font=("Segoe UI", 10, "bold"))
+        self.chat_box.configure(font=UI_FONT)
         row = ttk.Frame(f)
         row.pack(fill="x")
-        self.chat_in = tk.Text(row, height=3, wrap="word", font=("Segoe UI", 10))
+        self.chat_in = tk.Text(row, height=3, wrap="word", font=UI_FONT, bg=FIELD, fg=TEXT, insertbackground=TEXT, relief="flat",
+                               highlightthickness=1, highlightbackground=BORDER, highlightcolor=ACCENT, padx=10, pady=8)
         self.chat_in.pack(side="left", fill="x", expand=True)
         self.chat_in.bind("<Return>", lambda e: (self.send_chat(), "break")[1] if not (e.state & 1) else None)
         col = ttk.Frame(row)
         col.pack(side="left", padx=(6, 0))
-        self.send_btn = ttk.Button(col, text="Send", command=self.send_chat)
+        self.send_btn = ttk.Button(col, text="Send", command=self.send_chat, style="Accent.TButton")
         self.send_btn.pack(fill="x")
         ttk.Button(col, text="Stop", command=self.chat_cancel.set).pack(fill="x", pady=2)
         ttk.Button(col, text="Clear", command=self.clear_chat).pack(fill="x")
         self.chat_stats = tk.StringVar()
-        ttk.Label(f, textvariable=self.chat_stats, foreground="#666").pack(anchor="w")
+        ttk.Label(f, textvariable=self.chat_stats, style="Muted.TLabel").pack(anchor="w")
         return f
 
     def clear_chat(self):
@@ -519,7 +600,7 @@ class App:
     # ---------- keys ----------
     def build_keys(self, nb):
         f = ttk.Frame(nb, padding=10)
-        ttk.Label(f, text="API keys. KSTRL installs get one automatically; make one here for other apps. Launch only stores a hash of each key.", foreground="#666").pack(anchor="w")
+        ttk.Label(f, text="API keys. KSTRL installs get one automatically; make one here for other apps. Launch only stores a hash of each key.", style="Muted.TLabel").pack(anchor="w")
         self.keys_tv = tv = ttk.Treeview(f, columns=("plan", "state", "used", "who"), height=14)
         for col, name, w in (("#0", "Key", 170), ("plan", "Plan", 60), ("state", "State", 80), ("used", "Credits today", 110), ("who", "Who", 360)):
             tv.heading(col, text=name)
@@ -527,7 +608,7 @@ class App:
         tv.pack(fill="both", expand=True, pady=6)
         row = ttk.Frame(f)
         row.pack(fill="x")
-        ttk.Button(row, text="Create key…", command=self.create_key).pack(side="left")
+        ttk.Button(row, text="Create key…", command=self.create_key, style="Accent.TButton").pack(side="left")
         ttk.Button(row, text="Make MAX", command=lambda: self.key_action("plan", "max")).pack(side="left", padx=6)
         ttk.Button(row, text="Make Free", command=lambda: self.key_action("plan", "free")).pack(side="left")
         ttk.Button(row, text="Revoke", command=lambda: self.key_action("revoke")).pack(side="left", padx=6)
@@ -561,7 +642,7 @@ class App:
         self.bg(run)
 
     def show_key(self, key):
-        w = tk.Toplevel(self.root)
+        w = tk.Toplevel(self.root, bg=PANEL)
         w.title("Your new API key")
         ttk.Label(w, text="Copy it now — Launch won't show it again.", padding=10).pack()
         v = tk.StringVar(value=key)
@@ -586,7 +667,7 @@ class App:
     # ---------- accounts ----------
     def build_users(self, nb):
         f = ttk.Frame(nb, padding=10)
-        ttk.Label(f, text="Accounts made with KSTRL's Sign up screen. Usage is counted per account, across all of a person's devices.", foreground="#666").pack(anchor="w")
+        ttk.Label(f, text="Accounts made with KSTRL's Sign up screen. Usage is counted per account, across all of a person's devices.", style="Muted.TLabel").pack(anchor="w")
         self.users_tv = tv = ttk.Treeview(f, columns=("name", "plan", "state", "used"), height=14)
         for col, name, w in (("#0", "Email", 280), ("name", "Name", 160), ("plan", "Plan", 60), ("state", "State", 80), ("used", "Credits today", 110)):
             tv.heading(col, text=name)
