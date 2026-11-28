@@ -44,10 +44,10 @@ function UpdateControl() {
   const [u, setU] = useState(null);
   useEffect(() => { api.update.state().then(setU); return api.update.onStatus((x) => setU((p) => ({ ...p, ...x }))); }, []);
   if (!u) return null;
-  if (u.status === 'unsupported') return <span className="set-note">{u.reason === 'portable' ? 'Portable version — install with KSTRL-Setup to update automatically' : 'Available in the installed app'}</span>;
+  if (u.reason === 'dev') return <span className="set-note">Available in the installed app</span>;
   if (u.status === 'ready') return <button className="btn grad" onClick={() => api.update.install()}><ArrowUpCircle size={13} /> Restart to update</button>;
-  if (u.status === 'available') return <button className="btn light" onClick={() => api.update.download()}>Download {u.version}</button>;
-  const note = { checking: 'Checking…', current: 'Up to date', downloading: `Downloading… ${u.percent ?? 0}%`, error: 'Check failed' }[u.status];
+  if (u.status === 'available') return <button className="btn grad" onClick={() => api.update.download()}><ArrowUpCircle size={13} /> {u.manual ? `Download ${u.version}` : `Update to ${u.version}`}</button>;
+  const note = { checking: 'Checking…', current: `Up to date (${u.current})`, downloading: `Downloading… ${u.percent ?? 0}%`, error: u.error || 'Check failed' }[u.status];
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       {note && <span className="set-note">{note}</span>}

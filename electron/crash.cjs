@@ -51,4 +51,4 @@ function init() {
   write('INFO', 'app', `KSTRL ${app.getVersion()} started on ${process.platform} ${os.release()}`);
 }
 
-module.exports = { init, report, logsDir: dir, lastError: () => lastError };
+module.exports = { init, report, log: (source, message) => write('info', source, message), logsDir: dir, lastError: () => lastError };

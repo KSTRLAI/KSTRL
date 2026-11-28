@@ -88,6 +88,15 @@ export default function App() {
   const chatState = useChats();
   const [update, setUpdate] = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(null);
+  const [updateTried, setUpdateTried] = useState(false);
+  const checkUpdate = async () => {
+    setUpdateDismissed(null);
+    toast('Checking for updates…');
+    const u = await api.update.check();
+    if (u?.reason === 'dev') toast('Updates work in the installed app');
+    else if (u?.status === 'current') toast(`You’re on the latest version (${u.current})`);
+    else if (u?.status === 'error') toast(u.error || 'Couldn’t check for updates');
+  };
   useEffect(() => {
     api.update.state().then(setUpdate);
     return api.update.onStatus(setUpdate);
@@ -549,7 +558,8 @@ export default function App() {
                 onAutomations={() => setHomePage('automations')}
                 onChats={() => setHomePage('chat')}
                 update={update}
-                onUpdate={() => (update?.status === 'available' ? api.update.download() : api.update.install())}
+                onUpdate={() => { setUpdateDismissed(null); setUpdateTried(true); api.update.download(); }}
+                onCheckUpdate={checkUpdate}
                 onShortcuts={() => setSettingsOpen('keys')}
                 onLogin={connectApi}
                 onSkills={() => setHomePage('skills')}
@@ -643,15 +653,26 @@ export default function App() {
         <span className="item">{(MODES.find((m) => m.id === settings.mode) || MODES[0]).name}</span>
       </div>}
 
-      {update?.status === 'ready' && updateDismissed !== update.version && (
-        <div className="update-banner glass-strong">
-          <img src="./logo.png" alt="" />
-          <div style={{ flex: 1 }}>
-            <div className="t">KSTRL {update.version} is ready</div>
-            <div className="d">KSTRL updates in the background and reopens in a few seconds. Chats in progress will be closed.</div>
+      {!IDE && update && update.version && (['available', 'downloading', 'ready'].includes(update.status) || (update.status === 'error' && updateTried)) && updateDismissed !== update.version && (
+        <div className="overlay center">
+          <div className="update-prompt glass-strong">
+            <img src="./icon.png" alt="" />
+            <h3>{update.status === 'ready' ? `KSTRL ${update.version} is ready` : update.status === 'error' ? 'The update didn\u2019t work' : 'Update available'}</h3>
+            <p>{update.status === 'error'
+              ? <>{update.error || 'Something went wrong.'} You can download the new version from the releases page instead.</>
+              : update.status === 'downloading' ? <>Downloading KSTRL {update.version}… KSTRL restarts by itself when it’s done.</>
+              : update.status === 'ready' ? <>Restart to finish updating. Chats in progress will stop.</>
+              : <>KSTRL {update.version} is out — you have {update.current}. {update.manual ? 'Download it from the releases page.' : 'Update now and KSTRL restarts in the new version.'}</>}</p>
+            {update.status === 'downloading' && <div className="up-bar"><div style={{ width: `${update.percent ?? 0}%` }} /></div>}
+            <div className="up-row">
+              <button className="btn ghost" onClick={() => { setUpdateDismissed(update.version); setUpdateTried(false); }}>{update.status === 'downloading' ? 'Hide' : 'Later'}</button>
+              {update.status === 'error'
+                ? <button className="btn grad" onClick={() => { api.shell.openExternal(update.page); setUpdateDismissed(update.version); }}>Open releases page</button>
+                : <button className="btn grad" disabled={update.status === 'downloading'} onClick={() => { setUpdateTried(true); api.update.download(); if (update.manual) setUpdateDismissed(update.version); }}>
+                    {update.status === 'downloading' ? `Updating… ${update.percent ?? 0}%` : update.status === 'ready' ? 'Restart now' : update.manual ? 'Download' : 'Update now'}
+                  </button>}
+            </div>
           </div>
-          <button className="btn ghost" onClick={() => setUpdateDismissed(update.version)}>Later</button>
-          <button className="btn grad" onClick={() => api.update.install()}>Restart</button>
         </div>
       )}
 

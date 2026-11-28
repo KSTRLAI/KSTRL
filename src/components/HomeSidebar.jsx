@@ -23,7 +23,7 @@ function Ring({ value, total }) {
   );
 }
 
-export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast, onLogin, onSkills }) {
+export default function HomeSidebar({ settings, workspace, width, onNewChat, onOpenFolder, onNewProject, onOpenRecent, onCustomize, onSettings, onServer, onSearch, homePage, onAutomations, onChats, update, onUpdate, onShortcuts, onToast, onLogin, onSkills, onCheckUpdate }) {
   const [acct, setAcct] = useState(null);
   const s = useChats();
   const current = activeChat(s);
@@ -153,7 +153,7 @@ export default function HomeSidebar({ settings, workspace, width, onNewChat, onO
             {[
               [SettingsIcon, 'Settings', 'Ctrl+,', onSettings],
               '-',
-              [RefreshCw, 'Check for Updates', '', async () => { const u = await window.kstrl.update.check(); onToast?.(u?.status === 'unsupported' ? (u.reason === 'platform' ? 'On Mac, download new versions from the KSTRL releases page' : 'Updates work in the installed app') : 'Checking for updates…'); }],
+              [RefreshCw, 'Check for Updates', '', () => onCheckUpdate?.()],
               [BookOpen, 'Docs', '', () => window.kstrl.shell.openExternal(SITE)],
               [Keyboard, 'Shortcuts', '', onShortcuts],
               [TriangleAlert, 'Report Issue', '', () => window.kstrl.shell.openExternal(ISSUES)],

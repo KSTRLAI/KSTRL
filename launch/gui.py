@@ -67,6 +67,7 @@ class App:
         r.after(50, self.pump)
         self.ready = False
         self.bg(self.do_setup)
+        self.root.after(4000, lambda: self.bg(self.check_update, False))
 
     # ---------- plumbing ----------
     def set_icon(self):
@@ -156,12 +157,61 @@ class App:
         ttk.Label(f, textvariable=self.setup_info, justify="left").pack(anchor="w")
         row = ttk.Frame(f)
         row.pack(fill="x", pady=6)
+        ttk.Button(row, text="Check for updates", command=lambda: self.bg(self.check_update, True)).pack(side="left", padx=(0, 6))
         ttk.Button(row, text="Reinstall runtime", command=self.reinstall).pack(side="left")
         ttk.Button(row, text="Open Launch folder", command=lambda: self.open_path(self.b.BASE)).pack(side="left", padx=6)
         ttk.Button(row, text="Open models folder", command=lambda: self.open_path(Path.home() / ".launch" / "models")).pack(side="left")
         box, self.setup_log = self.text_box(f, 20)
         box.pack(fill="both", expand=True)
         return f
+
+    # ---------- updates ----------
+    def check_update(self, manual: bool):
+        import updater
+        updater.cleanup()
+        try:
+            rel = updater.latest()
+        except Exception as e:  # noqa: BLE001
+            if manual:
+                self.ui(messagebox.showerror, "Launch", f"Couldn't check for updates: {e}")
+            return
+        if not rel or not updater.newer(rel["version"], self.b.VERSION):
+            if manual:
+                self.ui(messagebox.showinfo, "Launch", f"You're on the latest version ({self.b.VERSION}).")
+            return
+        self.ui(self.prompt_update, rel)
+
+    def prompt_update(self, rel):
+        import updater
+        if not messagebox.askyesno("Update available",
+                                   f"Launch {rel['version']} is available — you have {self.b.VERSION}.\n\n"
+                                   + ("Update now? Launch downloads it and restarts by itself." if updater.can_self_update()
+                                      else "Open the download page?"), parent=self.root):
+            return
+        if not updater.can_self_update():
+            import webbrowser
+            webbrowser.open(rel["page"])
+            return
+        if self.server:
+            if not messagebox.askyesno("Launch", "The server is running. Stop it and update?"):
+                return
+            self._stopping = True
+            self.server.terminate()
+
+        def run():
+            exe = Path(sys.executable)
+            new = exe.with_name(exe.stem + ".new.exe")
+            self.ui(self.status.set, f"Downloading Launch {rel['version']}…")
+            try:
+                updater.download(rel["url"], new, lambda pct: self.ui(self.status.set, f"Downloading Launch {rel['version']}… {pct}%"))
+                self.ui(self.status.set, "Restarting into the new version…")
+                updater.apply(new)
+            except Exception as e:  # noqa: BLE001
+                self.ui(messagebox.showerror, "Launch", f"The update didn't work: {e}\n\nYou can download it from {rel['page']}")
+                self.ui(self.status.set, "Update failed")
+                return
+            self.ui(self.root.destroy)
+        self.bg(run)
 
     def reinstall(self):
         if self.server:
